@@ -1,6 +1,14 @@
 import * as BABYLON from 'babylonjs';
 import 'babylonjs-loaders';
 
+type Axis = 'x' | 'y' | 'z';
+
+interface SceneState {
+  animatingBox: boolean;
+  boxOrientation: Axis;
+  boxPosition: BABYLON.Vector2;
+}
+
 const onContentLoaded = () => {
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
   const fpsLabel = document.getElementById("fpsLabel");
@@ -17,8 +25,10 @@ const onContentLoaded = () => {
   };
 
   const createScene = function(engine: BABYLON.Engine) {
-    const sceneState = {
-      animatingBox: false
+    const sceneState: SceneState = {
+      animatingBox: false,
+      boxOrientation: 'y',
+      boxPosition: new BABYLON.Vector2(0, 0)
     };
 
     const scene = new BABYLON.Scene(engine);
@@ -48,13 +58,11 @@ const onContentLoaded = () => {
 
     // Rottation gizmo
     var gizmo = BABYLON.Mesh.CreateSphere('gizmo', 6, 0.1, scene);
-    // gizmo.position = sceneState.position;
     gizmo.visibility = 0;
 
     // Box that will cast shadows
     const box = BABYLON.Mesh.CreateBox('box', 1, scene);
     box.parent = gizmo;
-    box.position.y += 0.5;
     box.material = boxMaterial;
 
     // Point light for casting shadows from the box
@@ -70,6 +78,7 @@ const onContentLoaded = () => {
 
     // Use shadow generator to cast shadows from box on to ground plane
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight1);
+    shadowGenerator.forceBackFacesOnly = true;
     shadowGenerator.getShadowMap().renderList.push(box);
 
     // Define an animation for rotation about the X axis
@@ -84,11 +93,53 @@ const onContentLoaded = () => {
       BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
     );
 
+    const resetTransformations = () => {
+      gizmo.position = new BABYLON.Vector3(sceneState.boxPosition.x, 0.0, sceneState.boxPosition.y);
+      gizmo.rotation = new BABYLON.Vector3();
+      if (sceneState.boxOrientation === 'x') {
+        box.scaling = new BABYLON.Vector3(2.0, 1.0, 1.0);
+        box.position.x = 0;
+        box.position.y = 0.5;
+        box.position.z = 0;
+      } else if (sceneState.boxOrientation === 'y') {
+        box.scaling = new BABYLON.Vector3(1.0, 2.0, 1.0);
+        box.position.x = 0;
+        box.position.y = 1.0;
+        box.position.z = 0;
+      } else {
+        box.scaling = new BABYLON.Vector3(1.0, 1.0, 2.0);
+        box.position.x = 0;
+        box.position.y = 0.5;
+        box.position.z = 0;
+      }
+    };
+
+    const moveGizmoToXMin = () => {
+      if (sceneState.boxOrientation === 'x') {
+        gizmo.position.x -= 1.0;
+        box.position.x = 1.0;
+      } else {
+        gizmo.position.x -= 0.5;
+        box.position.x = 0.5;
+      }
+    };
+
+    const moveLeftComplete = () => {
+      if (sceneState.boxOrientation === 'x') {
+        sceneState.boxOrientation = 'y';
+        sceneState.boxPosition.x -= 1.5;
+      } else if (sceneState.boxOrientation === 'y') {
+        sceneState.boxOrientation = 'x';
+        sceneState.boxPosition.x -= 1.5;
+      } else {
+        sceneState.boxPosition.x -= 1;
+      }
+    };
+
     const moveLeft = () => {
       if (!sceneState.animatingBox) {
         sceneState.animatingBox = true;
-        gizmo.position.x -= 0.5;  // Move gizmo to bottom left edge of box
-        box.position.x = 0.5;     // Change relative position of box, so that it does move
+        moveGizmoToXMin();
         rotationZ.setKeys([
           {frame: 0, value: 0},
           {frame: 30, value: Math.PI / 2}
@@ -97,18 +148,38 @@ const onContentLoaded = () => {
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
           sceneState.animatingBox = false;
           gizmo.animations.pop();
-          gizmo.position.x -= 0.5;  // Move gizmo to center of new tile
-          gizmo.rotation.z = 0;     // Reset rotation of gizmo, so that axis are consistent
-          box.position.x = 0;       // Reset position of box, relative to gizmo
+          moveLeftComplete();
+          resetTransformations();
         });
+      }
+    };
+
+    const moveGizmoToXMax = () => {
+      if (sceneState.boxOrientation === 'x') {
+        gizmo.position.x += 1.0;
+        box.position.x = -1.0;
+      } else {
+        gizmo.position.x += 0.5;
+        box.position.x -= 0.5;
+      }
+    }
+
+    const moveRightComplete = () => {
+      if (sceneState.boxOrientation === 'x') {
+        sceneState.boxOrientation = 'y';
+        sceneState.boxPosition.x += 1.5;
+      } else if (sceneState.boxOrientation === 'y') {
+        sceneState.boxOrientation = 'x';
+        sceneState.boxPosition.x += 1.5;
+      } else {
+        sceneState.boxPosition.x += 1.0;
       }
     };
 
     const moveRight = () => {
       if (!sceneState.animatingBox) {
         sceneState.animatingBox = true;
-        gizmo.position.x += 0.5;  // Move gizmo to bottom right edge of box
-        box.position.x = -0.5;
+        moveGizmoToXMax();
         rotationZ.setKeys([
           {frame: 0, value: 0},
           {frame: 30, value: -Math.PI / 2}
@@ -117,18 +188,38 @@ const onContentLoaded = () => {
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
           sceneState.animatingBox = false;
           gizmo.animations.pop();
-          gizmo.position.x += 0.5;
-          gizmo.rotation.z = 0;
-          box.position.x = 0;
+          moveRightComplete();
+          resetTransformations();
         })
       }
     };
 
+    const moveGizmoToYMin = () => {
+      if (sceneState.boxOrientation === 'z') {
+        gizmo.position.z -= 1.0;
+        box.position.z = 1.0;
+      } else {
+        gizmo.position.z -= 0.5;
+        box.position.z = 0.5;
+      }
+    };
+
+    const moveDownComplete = () => {
+      if (sceneState.boxOrientation === 'y') {
+        sceneState.boxOrientation = 'z';
+        sceneState.boxPosition.y -= 1.5;
+      } else if (sceneState.boxOrientation === 'z') {
+        sceneState.boxOrientation = 'y';
+        sceneState.boxPosition.y -= 1.5;
+      } else {
+        sceneState.boxPosition.y -= 1.0;
+      }
+    }
+
     const moveDown = () => {
       if (!sceneState.animatingBox) {
         sceneState.animatingBox = true;
-        gizmo.position.z -= 0.5;
-        box.position.z = 0.5;
+        moveGizmoToYMin();
         rotationX.setKeys([
           {frame: 0, value: 0},
           {frame: 30, value: -Math.PI / 2}
@@ -137,18 +228,38 @@ const onContentLoaded = () => {
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
           sceneState.animatingBox = false;
           gizmo.animations.pop();
-          gizmo.position.z -= 0.5;  // Move gizmo to center of new tile
-          gizmo.rotation.x = 0;     // Reset rotation of gizmo, so that axis are consistent
-          box.position.z = 0;       // Reset position of box, relative to gizmo
+          moveDownComplete();
+          resetTransformations();
         });
       }
     }
 
+    const moveGizmoToYMax = () => {
+      if (sceneState.boxOrientation === 'z') {
+        gizmo.position.z += 1.0;
+        box.position.z = -1.0;
+      } else {
+        gizmo.position.z += 0.5;
+        box.position.z = -0.5;
+      }
+    };
+
+    const moveUpComplete = () => {
+      if (sceneState.boxOrientation === 'y') {
+        sceneState.boxOrientation = 'z';
+        sceneState.boxPosition.y += 1.5;
+      } else if (sceneState.boxOrientation === 'z') {
+        sceneState.boxOrientation = 'y';
+        sceneState.boxPosition.y += 1.5;
+      } else {
+        sceneState.boxPosition.y += 1.0;
+      }
+    };
+
     const moveUp = () => {
       if (!sceneState.animatingBox) {
         sceneState.animatingBox = true;
-        gizmo.position.z += 0.5;
-        box.position.z = -0.5;
+        moveGizmoToYMax();
         rotationX.setKeys([
           {frame: 0, value: 0},
           {frame: 30, value: Math.PI / 2}
@@ -157,9 +268,8 @@ const onContentLoaded = () => {
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
           sceneState.animatingBox = false;
           gizmo.animations.pop();
-          gizmo.position.z += 0.5;
-          gizmo.rotation.x = 0;
-          box.position.z = 0;
+          moveUpComplete();
+          resetTransformations();
         });
       }
     };
@@ -182,6 +292,8 @@ const onContentLoaded = () => {
         }
       }
     });
+
+    resetTransformations();
 
     return scene;
   };
