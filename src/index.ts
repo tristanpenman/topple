@@ -14,7 +14,7 @@ interface Level {
 }
 
 interface SceneState {
-  animatingBlock: boolean;
+  animating: boolean;
   blockOrientation: Axis;
   blockPosition: BABYLON.Vector2;
   grid: Grid;
@@ -22,16 +22,14 @@ interface SceneState {
 
 const level: Level = {
   initialOrientation: 'y',
-  initialTile: new BABYLON.Vector2(1, 1),
+  initialTile: new BABYLON.Vector2(0, 0),
   grid: [
-    [1, 0, 1, 1, 1],
-    [1, 0, 0, 0, 1, 1, 1, 1, 1],
-    [0, 1, 1, 1, 1, 0],
-    [],
-    [0, 0, 1],
-    [0, 1, 1, 1, 1, 1],
-    [],
-    [1, 1, 1, 1, 1, 1]
+    [1, 1, 1, 1, 1, 1],
+    [1, 1, 0, 0, 1, 1, 1, 1, 1],
+    [0, 1, 1],
+    [1, 1, 1],
+    [1, 1, 1],
+    [0, 1, 1, 1, 1, 1]
   ]
 };
 
@@ -43,7 +41,7 @@ const onContentLoaded = () => {
   const resize = () => {
     const desiredWidth = window.innerWidth;
     const desiredHeight = window.innerHeight;
-    const devicePixelRatio = 1; // window.devicePixelRatio || 1;
+    const devicePixelRatio = window.devicePixelRatio || 1;
     canvas.style.width = `${desiredWidth}px`;
     canvas.style.height = `${desiredHeight}px`;
     canvas.width = desiredWidth * devicePixelRatio;
@@ -81,7 +79,7 @@ const onContentLoaded = () => {
     }
 
     const sceneState: SceneState = {
-      animatingBlock: false,
+      animating: false,
       blockOrientation: level.initialOrientation,
       blockPosition,
       grid: cloneDeep(level.grid)
@@ -90,22 +88,35 @@ const onContentLoaded = () => {
     const scene = new BABYLON.Scene(engine);
 
     // Create a simple camera, looking over the scene
-    const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(-4, 6, -9), scene);
-    camera.setTarget(BABYLON.Vector3.Zero());
+    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 1.5, Math.PI / 4, 10, BABYLON.Vector3.Zero(), scene);
+    camera.attachControl(canvas, false);
+    camera.inputs.remove(camera.inputs.attached.keyboard);
 
     // Create a basic light, aiming 0, 1, 0 - meaning, to the sky
     const ambientLight = new BABYLON.HemisphericLight('ambientLight', new BABYLON.Vector3(0, 1, 0), scene);
     ambientLight.intensity = 0.3;
 
-    // Non-specular material for ground plane
-    const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
-    groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
-    groundMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    // Non-specular material for tiles
+    const tileMaterial = new BABYLON.StandardMaterial("tileMaterial", scene);
+    tileMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    tileMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
 
-    // Create a ground plane that will receive shadows
-    const groundPlane = BABYLON.Mesh.CreateGround('groundPlane', extents.width, extents.depth, 2, scene, false);
-    groundPlane.material = groundMaterial;
-    groundPlane.receiveShadows = true;
+    const tileShape = {width: 1, depth: 1, height: 0.1};
+    const tileMeshes: BABYLON.Mesh[] = [];
+    level.grid.forEach((row, rowIndex) => {
+      row.forEach((cell, cellIndex) => {
+        if (cell === 1) {
+          const name = `tile[row=${rowIndex},col=${cellIndex}`;
+          const tileMesh = BABYLON.MeshBuilder.CreateBox(name, tileShape, scene);
+          tileMesh.material = tileMaterial;
+          tileMesh.receiveShadows = true;
+          tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
+          tileMesh.position.y = -0.05;
+          tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
+          tileMeshes.push(tileMesh);
+        }
+      });
+    });
 
     // Colored material for block
     const blockMaterial = new BABYLON.StandardMaterial("blockMaterial", scene);
@@ -117,34 +128,34 @@ const onContentLoaded = () => {
     gizmo.visibility = 0;
 
     // Block, which will cast shadows
-    const block = BABYLON.Mesh.CreateBox('block', 1, scene);
-    block.parent = gizmo;
-    block.material = blockMaterial;
+    const blockMesh = BABYLON.Mesh.CreateBox('blockMesh', 1, scene);
+    blockMesh.parent = gizmo;
+    blockMesh.material = blockMaterial;
 
     // Point light for casting shadows from the block
     const pointLight1 = new BABYLON.PointLight('pointLight1', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight1.intensity = 0.4;
     pointLight1.shadowEnabled = true;
-    pointLight1.includedOnlyMeshes = [groundPlane];
+    pointLight1.includedOnlyMeshes = tileMeshes;
 
     // Point light for the lighting the block
     const pointLight2 = new BABYLON.PointLight('pointLight2', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight2.intensity = 0.4;
-    pointLight2.includedOnlyMeshes = [block];
+    pointLight2.includedOnlyMeshes = [blockMesh];
 
     // Use shadow generator to cast shadows from block on to ground plane
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight1);
     shadowGenerator.forceBackFacesOnly = true;
-    shadowGenerator.getShadowMap().renderList.push(block);
+    shadowGenerator.getShadowMap().renderList.push(blockMesh);
 
     // Define an animation for rotation about the X axis
-    const rotationX = new BABYLON.Animation("rotationX", "rotation.x", 60,
+    const rotationX = new BABYLON.Animation("rotationX", "rotation.x", 120,
       BABYLON.Animation.ANIMATIONTYPE_FLOAT,
       BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
     );
 
     // Define an animation for rotation about the Z axis
-    const rotationZ = new BABYLON.Animation("rotationZ", "rotation.z", 60,
+    const rotationZ = new BABYLON.Animation("rotationZ", "rotation.z", 120,
       BABYLON.Animation.ANIMATIONTYPE_FLOAT,
       BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
     );
@@ -153,30 +164,30 @@ const onContentLoaded = () => {
       gizmo.position = new BABYLON.Vector3(sceneState.blockPosition.x, 0.0, sceneState.blockPosition.y);
       gizmo.rotation = new BABYLON.Vector3();
       if (sceneState.blockOrientation === 'x') {
-        block.scaling = new BABYLON.Vector3(2.0, 1.0, 1.0);
-        block.position.x = 0;
-        block.position.y = 0.5;
-        block.position.z = 0;
+        blockMesh.scaling = new BABYLON.Vector3(2.0, 1.0, 1.0);
+        blockMesh.position.x = 0;
+        blockMesh.position.y = 0.5;
+        blockMesh.position.z = 0;
       } else if (sceneState.blockOrientation === 'y') {
-        block.scaling = new BABYLON.Vector3(1.0, 2.0, 1.0);
-        block.position.x = 0;
-        block.position.y = 1.0;
-        block.position.z = 0;
+        blockMesh.scaling = new BABYLON.Vector3(1.0, 2.0, 1.0);
+        blockMesh.position.x = 0;
+        blockMesh.position.y = 1.0;
+        blockMesh.position.z = 0;
       } else {
-        block.scaling = new BABYLON.Vector3(1.0, 1.0, 2.0);
-        block.position.x = 0;
-        block.position.y = 0.5;
-        block.position.z = 0;
+        blockMesh.scaling = new BABYLON.Vector3(1.0, 1.0, 2.0);
+        blockMesh.position.x = 0;
+        blockMesh.position.y = 0.5;
+        blockMesh.position.z = 0;
       }
     };
 
     const moveGizmoToXMin = () => {
       if (sceneState.blockOrientation === 'x') {
         gizmo.position.x -= 1.0;
-        block.position.x = 1.0;
+        blockMesh.position.x = 1.0;
       } else {
         gizmo.position.x -= 0.5;
-        block.position.x = 0.5;
+        blockMesh.position.x = 0.5;
       }
     };
 
@@ -193,8 +204,8 @@ const onContentLoaded = () => {
     };
 
     const moveLeft = () => {
-      if (!sceneState.animatingBlock) {
-        sceneState.animatingBlock = true;
+      if (!sceneState.animating) {
+        sceneState.animating = true;
         moveGizmoToXMin();
         rotationZ.setKeys([
           {frame: 0, value: 0},
@@ -202,7 +213,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationZ);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBlock = false;
+          sceneState.animating = false;
           gizmo.animations.pop();
           moveLeftComplete();
           resetTransformations();
@@ -213,10 +224,10 @@ const onContentLoaded = () => {
     const moveGizmoToXMax = () => {
       if (sceneState.blockOrientation === 'x') {
         gizmo.position.x += 1.0;
-        block.position.x = -1.0;
+        blockMesh.position.x = -1.0;
       } else {
         gizmo.position.x += 0.5;
-        block.position.x -= 0.5;
+        blockMesh.position.x -= 0.5;
       }
     }
 
@@ -233,8 +244,8 @@ const onContentLoaded = () => {
     };
 
     const moveRight = () => {
-      if (!sceneState.animatingBlock) {
-        sceneState.animatingBlock = true;
+      if (!sceneState.animating) {
+        sceneState.animating = true;
         moveGizmoToXMax();
         rotationZ.setKeys([
           {frame: 0, value: 0},
@@ -242,7 +253,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationZ);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBlock = false;
+          sceneState.animating = false;
           gizmo.animations.pop();
           moveRightComplete();
           resetTransformations();
@@ -253,10 +264,10 @@ const onContentLoaded = () => {
     const moveGizmoToYMin = () => {
       if (sceneState.blockOrientation === 'z') {
         gizmo.position.z -= 1.0;
-        block.position.z = 1.0;
+        blockMesh.position.z = 1.0;
       } else {
         gizmo.position.z -= 0.5;
-        block.position.z = 0.5;
+        blockMesh.position.z = 0.5;
       }
     };
 
@@ -273,8 +284,8 @@ const onContentLoaded = () => {
     }
 
     const moveDown = () => {
-      if (!sceneState.animatingBlock) {
-        sceneState.animatingBlock = true;
+      if (!sceneState.animating) {
+        sceneState.animating = true;
         moveGizmoToYMin();
         rotationX.setKeys([
           {frame: 0, value: 0},
@@ -282,7 +293,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationX);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBlock = false;
+          sceneState.animating = false;
           gizmo.animations.pop();
           moveDownComplete();
           resetTransformations();
@@ -293,10 +304,10 @@ const onContentLoaded = () => {
     const moveGizmoToYMax = () => {
       if (sceneState.blockOrientation === 'z') {
         gizmo.position.z += 1.0;
-        block.position.z = -1.0;
+        blockMesh.position.z = -1.0;
       } else {
         gizmo.position.z += 0.5;
-        block.position.z = -0.5;
+        blockMesh.position.z = -0.5;
       }
     };
 
@@ -313,8 +324,8 @@ const onContentLoaded = () => {
     };
 
     const moveUp = () => {
-      if (!sceneState.animatingBlock) {
-        sceneState.animatingBlock = true;
+      if (!sceneState.animating) {
+        sceneState.animating = true;
         moveGizmoToYMax();
         rotationX.setKeys([
           {frame: 0, value: 0},
@@ -322,7 +333,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationX);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBlock = false;
+          sceneState.animating = false;
           gizmo.animations.pop();
           moveUpComplete();
           resetTransformations();
