@@ -1,5 +1,4 @@
 import * as BABYLON from 'babylonjs';
-import 'babylonjs-loaders';
 import { cloneDeep } from 'lodash';
 
 type Axis = 'x' | 'y' | 'z';
