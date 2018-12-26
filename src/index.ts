@@ -1,13 +1,40 @@
 import * as BABYLON from 'babylonjs';
 import 'babylonjs-loaders';
+import { cloneDeep } from 'lodash';
 
 type Axis = 'x' | 'y' | 'z';
 
-interface SceneState {
-  animatingBox: boolean;
-  boxOrientation: Axis;
-  boxPosition: BABYLON.Vector2;
+type Tile = 0 | 1;
+
+type Grid = Tile[][];
+
+interface Level {
+  initialOrientation: Axis;
+  initialTile: BABYLON.Vector2;
+  grid: Grid;
 }
+
+interface SceneState {
+  animatingBlock: boolean;
+  blockOrientation: Axis;
+  blockPosition: BABYLON.Vector2;
+  grid: Grid;
+}
+
+const level: Level = {
+  initialOrientation: 'y',
+  initialTile: new BABYLON.Vector2(1, 1),
+  grid: [
+    [1, 0, 1, 1, 1],
+    [1, 0, 0, 0, 1, 1, 1, 1, 1],
+    [0, 1, 1, 1, 1, 0],
+    [],
+    [0, 0, 1],
+    [0, 1, 1, 1, 1, 1],
+    [],
+    [1, 1, 1, 1, 1, 1]
+  ]
+};
 
 const onContentLoaded = () => {
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
@@ -24,17 +51,47 @@ const onContentLoaded = () => {
     canvas.height = desiredHeight * devicePixelRatio;
   };
 
-  const createScene = function(engine: BABYLON.Engine) {
+  const findExtents = (grid: Grid) => {
+    const lengths = grid.map(row => {
+      const index = row.lastIndexOf(1);
+      return index === -1 ? row.length : index + 1;
+    });
+
+    const depth = grid.map(row => row.some(cell => cell === 1)).lastIndexOf(true);
+
+    return {
+      width: Math.max(...lengths),
+      depth: depth === -1 ? grid.length : depth + 1
+    };
+  };
+
+  const createScene = function(engine: BABYLON.Engine, level: Level) {
+    // Calculate position of block based on effective size of the grid, adopting the convention
+    // that tile (0, 0) is the furthest and left-most tile on the player's screen
+    const extents = findExtents(level.grid);
+    const blockPosition = new BABYLON.Vector2(
+      Math.round(level.initialTile.x) - extents.width / 2 + 0.5,
+      extents.depth / 2 - Math.round(level.initialTile.y) - 0.5
+    );
+
+    // Adjust position depending on orientation of the block
+    if (level.initialOrientation === 'x') {
+      blockPosition.x += 0.5;
+    } else if (level.initialOrientation === 'z') {
+      blockPosition.y += 0.5;
+    }
+
     const sceneState: SceneState = {
-      animatingBox: false,
-      boxOrientation: 'y',
-      boxPosition: new BABYLON.Vector2(0, 0)
+      animatingBlock: false,
+      blockOrientation: level.initialOrientation,
+      blockPosition,
+      grid: cloneDeep(level.grid)
     };
 
     const scene = new BABYLON.Scene(engine);
 
     // Create a simple camera, looking over the scene
-    const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(-3, 5, -7), scene);
+    const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(-4, 6, -9), scene);
     camera.setTarget(BABYLON.Vector3.Zero());
 
     // Create a basic light, aiming 0, 1, 0 - meaning, to the sky
@@ -47,39 +104,39 @@ const onContentLoaded = () => {
     groundMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
 
     // Create a ground plane that will receive shadows
-    const groundPlane = BABYLON.Mesh.CreateGround('groundPlane', 12, 6, 2, scene, false);
+    const groundPlane = BABYLON.Mesh.CreateGround('groundPlane', extents.width, extents.depth, 2, scene, false);
     groundPlane.material = groundMaterial;
     groundPlane.receiveShadows = true;
 
-    // Colored material for box
-    const boxMaterial = new BABYLON.StandardMaterial("boxMaterial", scene);
-    boxMaterial.diffuseColor = new BABYLON.Color3(1, 0, 1);
-    boxMaterial.specularColor = new BABYLON.Color3(0.5, 0.6, 0.87);
+    // Colored material for block
+    const blockMaterial = new BABYLON.StandardMaterial("blockMaterial", scene);
+    blockMaterial.diffuseColor = new BABYLON.Color3(1, 0, 1);
+    blockMaterial.specularColor = new BABYLON.Color3(0.5, 0.6, 0.87);
 
     // Rottation gizmo
     var gizmo = BABYLON.Mesh.CreateSphere('gizmo', 6, 0.1, scene);
     gizmo.visibility = 0;
 
-    // Box that will cast shadows
-    const box = BABYLON.Mesh.CreateBox('box', 1, scene);
-    box.parent = gizmo;
-    box.material = boxMaterial;
+    // Block, which will cast shadows
+    const block = BABYLON.Mesh.CreateBox('block', 1, scene);
+    block.parent = gizmo;
+    block.material = blockMaterial;
 
-    // Point light for casting shadows from the box
+    // Point light for casting shadows from the block
     const pointLight1 = new BABYLON.PointLight('pointLight1', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight1.intensity = 0.4;
     pointLight1.shadowEnabled = true;
     pointLight1.includedOnlyMeshes = [groundPlane];
 
-    // Point light for the lighting the box
+    // Point light for the lighting the block
     const pointLight2 = new BABYLON.PointLight('pointLight2', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight2.intensity = 0.4;
-    pointLight2.includedOnlyMeshes = [box];
+    pointLight2.includedOnlyMeshes = [block];
 
-    // Use shadow generator to cast shadows from box on to ground plane
+    // Use shadow generator to cast shadows from block on to ground plane
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight1);
     shadowGenerator.forceBackFacesOnly = true;
-    shadowGenerator.getShadowMap().renderList.push(box);
+    shadowGenerator.getShadowMap().renderList.push(block);
 
     // Define an animation for rotation about the X axis
     const rotationX = new BABYLON.Animation("rotationX", "rotation.x", 60,
@@ -94,51 +151,51 @@ const onContentLoaded = () => {
     );
 
     const resetTransformations = () => {
-      gizmo.position = new BABYLON.Vector3(sceneState.boxPosition.x, 0.0, sceneState.boxPosition.y);
+      gizmo.position = new BABYLON.Vector3(sceneState.blockPosition.x, 0.0, sceneState.blockPosition.y);
       gizmo.rotation = new BABYLON.Vector3();
-      if (sceneState.boxOrientation === 'x') {
-        box.scaling = new BABYLON.Vector3(2.0, 1.0, 1.0);
-        box.position.x = 0;
-        box.position.y = 0.5;
-        box.position.z = 0;
-      } else if (sceneState.boxOrientation === 'y') {
-        box.scaling = new BABYLON.Vector3(1.0, 2.0, 1.0);
-        box.position.x = 0;
-        box.position.y = 1.0;
-        box.position.z = 0;
+      if (sceneState.blockOrientation === 'x') {
+        block.scaling = new BABYLON.Vector3(2.0, 1.0, 1.0);
+        block.position.x = 0;
+        block.position.y = 0.5;
+        block.position.z = 0;
+      } else if (sceneState.blockOrientation === 'y') {
+        block.scaling = new BABYLON.Vector3(1.0, 2.0, 1.0);
+        block.position.x = 0;
+        block.position.y = 1.0;
+        block.position.z = 0;
       } else {
-        box.scaling = new BABYLON.Vector3(1.0, 1.0, 2.0);
-        box.position.x = 0;
-        box.position.y = 0.5;
-        box.position.z = 0;
+        block.scaling = new BABYLON.Vector3(1.0, 1.0, 2.0);
+        block.position.x = 0;
+        block.position.y = 0.5;
+        block.position.z = 0;
       }
     };
 
     const moveGizmoToXMin = () => {
-      if (sceneState.boxOrientation === 'x') {
+      if (sceneState.blockOrientation === 'x') {
         gizmo.position.x -= 1.0;
-        box.position.x = 1.0;
+        block.position.x = 1.0;
       } else {
         gizmo.position.x -= 0.5;
-        box.position.x = 0.5;
+        block.position.x = 0.5;
       }
     };
 
     const moveLeftComplete = () => {
-      if (sceneState.boxOrientation === 'x') {
-        sceneState.boxOrientation = 'y';
-        sceneState.boxPosition.x -= 1.5;
-      } else if (sceneState.boxOrientation === 'y') {
-        sceneState.boxOrientation = 'x';
-        sceneState.boxPosition.x -= 1.5;
+      if (sceneState.blockOrientation === 'x') {
+        sceneState.blockOrientation = 'y';
+        sceneState.blockPosition.x -= 1.5;
+      } else if (sceneState.blockOrientation === 'y') {
+        sceneState.blockOrientation = 'x';
+        sceneState.blockPosition.x -= 1.5;
       } else {
-        sceneState.boxPosition.x -= 1;
+        sceneState.blockPosition.x -= 1;
       }
     };
 
     const moveLeft = () => {
-      if (!sceneState.animatingBox) {
-        sceneState.animatingBox = true;
+      if (!sceneState.animatingBlock) {
+        sceneState.animatingBlock = true;
         moveGizmoToXMin();
         rotationZ.setKeys([
           {frame: 0, value: 0},
@@ -146,7 +203,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationZ);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBox = false;
+          sceneState.animatingBlock = false;
           gizmo.animations.pop();
           moveLeftComplete();
           resetTransformations();
@@ -155,30 +212,30 @@ const onContentLoaded = () => {
     };
 
     const moveGizmoToXMax = () => {
-      if (sceneState.boxOrientation === 'x') {
+      if (sceneState.blockOrientation === 'x') {
         gizmo.position.x += 1.0;
-        box.position.x = -1.0;
+        block.position.x = -1.0;
       } else {
         gizmo.position.x += 0.5;
-        box.position.x -= 0.5;
+        block.position.x -= 0.5;
       }
     }
 
     const moveRightComplete = () => {
-      if (sceneState.boxOrientation === 'x') {
-        sceneState.boxOrientation = 'y';
-        sceneState.boxPosition.x += 1.5;
-      } else if (sceneState.boxOrientation === 'y') {
-        sceneState.boxOrientation = 'x';
-        sceneState.boxPosition.x += 1.5;
+      if (sceneState.blockOrientation === 'x') {
+        sceneState.blockOrientation = 'y';
+        sceneState.blockPosition.x += 1.5;
+      } else if (sceneState.blockOrientation === 'y') {
+        sceneState.blockOrientation = 'x';
+        sceneState.blockPosition.x += 1.5;
       } else {
-        sceneState.boxPosition.x += 1.0;
+        sceneState.blockPosition.x += 1.0;
       }
     };
 
     const moveRight = () => {
-      if (!sceneState.animatingBox) {
-        sceneState.animatingBox = true;
+      if (!sceneState.animatingBlock) {
+        sceneState.animatingBlock = true;
         moveGizmoToXMax();
         rotationZ.setKeys([
           {frame: 0, value: 0},
@@ -186,7 +243,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationZ);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBox = false;
+          sceneState.animatingBlock = false;
           gizmo.animations.pop();
           moveRightComplete();
           resetTransformations();
@@ -195,30 +252,30 @@ const onContentLoaded = () => {
     };
 
     const moveGizmoToYMin = () => {
-      if (sceneState.boxOrientation === 'z') {
+      if (sceneState.blockOrientation === 'z') {
         gizmo.position.z -= 1.0;
-        box.position.z = 1.0;
+        block.position.z = 1.0;
       } else {
         gizmo.position.z -= 0.5;
-        box.position.z = 0.5;
+        block.position.z = 0.5;
       }
     };
 
     const moveDownComplete = () => {
-      if (sceneState.boxOrientation === 'y') {
-        sceneState.boxOrientation = 'z';
-        sceneState.boxPosition.y -= 1.5;
-      } else if (sceneState.boxOrientation === 'z') {
-        sceneState.boxOrientation = 'y';
-        sceneState.boxPosition.y -= 1.5;
+      if (sceneState.blockOrientation === 'y') {
+        sceneState.blockOrientation = 'z';
+        sceneState.blockPosition.y -= 1.5;
+      } else if (sceneState.blockOrientation === 'z') {
+        sceneState.blockOrientation = 'y';
+        sceneState.blockPosition.y -= 1.5;
       } else {
-        sceneState.boxPosition.y -= 1.0;
+        sceneState.blockPosition.y -= 1.0;
       }
     }
 
     const moveDown = () => {
-      if (!sceneState.animatingBox) {
-        sceneState.animatingBox = true;
+      if (!sceneState.animatingBlock) {
+        sceneState.animatingBlock = true;
         moveGizmoToYMin();
         rotationX.setKeys([
           {frame: 0, value: 0},
@@ -226,7 +283,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationX);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBox = false;
+          sceneState.animatingBlock = false;
           gizmo.animations.pop();
           moveDownComplete();
           resetTransformations();
@@ -235,30 +292,30 @@ const onContentLoaded = () => {
     }
 
     const moveGizmoToYMax = () => {
-      if (sceneState.boxOrientation === 'z') {
+      if (sceneState.blockOrientation === 'z') {
         gizmo.position.z += 1.0;
-        box.position.z = -1.0;
+        block.position.z = -1.0;
       } else {
         gizmo.position.z += 0.5;
-        box.position.z = -0.5;
+        block.position.z = -0.5;
       }
     };
 
     const moveUpComplete = () => {
-      if (sceneState.boxOrientation === 'y') {
-        sceneState.boxOrientation = 'z';
-        sceneState.boxPosition.y += 1.5;
-      } else if (sceneState.boxOrientation === 'z') {
-        sceneState.boxOrientation = 'y';
-        sceneState.boxPosition.y += 1.5;
+      if (sceneState.blockOrientation === 'y') {
+        sceneState.blockOrientation = 'z';
+        sceneState.blockPosition.y += 1.5;
+      } else if (sceneState.blockOrientation === 'z') {
+        sceneState.blockOrientation = 'y';
+        sceneState.blockPosition.y += 1.5;
       } else {
-        sceneState.boxPosition.y += 1.0;
+        sceneState.blockPosition.y += 1.0;
       }
     };
 
     const moveUp = () => {
-      if (!sceneState.animatingBox) {
-        sceneState.animatingBox = true;
+      if (!sceneState.animatingBlock) {
+        sceneState.animatingBlock = true;
         moveGizmoToYMax();
         rotationX.setKeys([
           {frame: 0, value: 0},
@@ -266,7 +323,7 @@ const onContentLoaded = () => {
         ]);
         gizmo.animations.push(rotationX);
         scene.beginAnimation(gizmo, 0, 30, false, 1, () => {
-          sceneState.animatingBox = false;
+          sceneState.animatingBlock = false;
           gizmo.animations.pop();
           moveUpComplete();
           resetTransformations();
@@ -303,7 +360,7 @@ const onContentLoaded = () => {
     stencil: true
   });
 
-  const scene = createScene(engine);
+  const scene = createScene(engine, level);
 
   // Update FPS counter once per second
   setInterval(() => {
