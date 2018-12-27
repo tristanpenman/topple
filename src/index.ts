@@ -26,8 +26,8 @@ interface Extents {
 }
 
 const level: Level = {
-  initialOrientation: 'z',
-  initialTile: new BABYLON.Vector2(3, 2),
+  initialOrientation: 'y',
+  initialTile: new BABYLON.Vector2(2, 3),
   grid: [
     [0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0],
@@ -286,8 +286,15 @@ const onContentLoaded = () => {
     };
 
     const checkBlock = () => {
-      // TODO: Check block position before exploding it
-      //explodeBlock();
+      const shouldExplode =
+        sceneState.blockTile.y > sceneState.grid.length - 1 ||
+        sceneState.blockTile.y < 0 ||
+        sceneState.blockTile.x > sceneState.grid[sceneState.blockTile.y].length - 1 ||
+        sceneState.blockTile.x < 0 ||
+        sceneState.grid[sceneState.blockTile.y][sceneState.blockTile.x] === 0;
+      if (shouldExplode) {
+        explodeBlock();
+      }
     }
 
     const resetTransformations = () => {
