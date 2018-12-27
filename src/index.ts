@@ -16,13 +16,18 @@ interface Level {
 interface SceneState {
   animating: boolean;
   blockOrientation: Axis;
-  blockPosition: BABYLON.Vector2;
+  blockTile: BABYLON.Vector2;
   grid: Grid;
 }
 
+interface Extents {
+  depth: number;
+  width: number;
+}
+
 const level: Level = {
-  initialOrientation: 'x',
-  initialTile: new BABYLON.Vector2(2, 2),
+  initialOrientation: 'z',
+  initialTile: new BABYLON.Vector2(3, 2),
   grid: [
     [0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0],
@@ -45,14 +50,14 @@ const onContentLoaded = () => {
   const resize = () => {
     const desiredWidth = window.innerWidth;
     const desiredHeight = window.innerHeight;
-    const devicePixelRatio = window.devicePixelRatio || 1;
+    const devicePixelRatio = 1; // window.devicePixelRatio || 1;
     canvas.style.width = `${desiredWidth}px`;
     canvas.style.height = `${desiredHeight}px`;
     canvas.width = desiredWidth * devicePixelRatio;
     canvas.height = desiredHeight * devicePixelRatio;
   };
 
-  const findExtents = (grid: Grid) => {
+  const findExtents = (grid: Grid): Extents => {
     const lengths = grid.map(row => {
       const index = row.lastIndexOf(1);
       return index === -1 ? row.length : index + 1;
@@ -66,26 +71,31 @@ const onContentLoaded = () => {
     };
   };
 
+  const calculateBlockPosition = (tile: BABYLON.Vector2, orientation: Axis, extents: Extents) => {
+    const blockPosition = new BABYLON.Vector2(
+      Math.round(tile.x) - extents.width / 2 + 0.5,
+      extents.depth / 2 - Math.round(tile.y) - 0.5
+    );
+
+    // Adjust position depending on orientation of the block
+    if (orientation === 'x') {
+      blockPosition.x += 0.5;
+    } else if (orientation === 'z') {
+      blockPosition.y -= 0.5;
+    }
+
+    return blockPosition;
+  }
+
   const createScene = function(engine: BABYLON.Engine, level: Level) {
     // Calculate position of block based on effective size of the grid, adopting the convention
     // that tile (0, 0) is the furthest and left-most tile on the player's screen
     const extents = findExtents(level.grid);
-    const blockPosition = new BABYLON.Vector2(
-      Math.round(level.initialTile.x) - extents.width / 2 + 0.5,
-      extents.depth / 2 - Math.round(level.initialTile.y) - 0.5
-    );
-
-    // Adjust position depending on orientation of the block
-    if (level.initialOrientation === 'x') {
-      blockPosition.x += 0.5;
-    } else if (level.initialOrientation === 'z') {
-      blockPosition.y += 0.5;
-    }
 
     const sceneState: SceneState = {
       animating: false,
       blockOrientation: level.initialOrientation,
-      blockPosition,
+      blockTile: level.initialTile.clone(),
       grid: cloneDeep(level.grid)
     };
 
@@ -277,11 +287,12 @@ const onContentLoaded = () => {
 
     const checkBlock = () => {
       // TODO: Check block position before exploding it
-      explodeBlock();
+      //explodeBlock();
     }
 
     const resetTransformations = () => {
-      gizmo.position = new BABYLON.Vector3(sceneState.blockPosition.x, 0.0, sceneState.blockPosition.y);
+      const blockPosition = calculateBlockPosition(sceneState.blockTile, sceneState.blockOrientation, extents);
+      gizmo.position = new BABYLON.Vector3(blockPosition.x, 0.0, blockPosition.y);
       gizmo.rotation = new BABYLON.Vector3();
       if (sceneState.blockOrientation === 'x') {
         blockMesh.scaling = new BABYLON.Vector3(2.0, 1.0, 1.0);
@@ -314,12 +325,12 @@ const onContentLoaded = () => {
     const moveLeftComplete = () => {
       if (sceneState.blockOrientation === 'x') {
         sceneState.blockOrientation = 'y';
-        sceneState.blockPosition.x -= 1.5;
+        sceneState.blockTile.x -= 1;
       } else if (sceneState.blockOrientation === 'y') {
         sceneState.blockOrientation = 'x';
-        sceneState.blockPosition.x -= 1.5;
+        sceneState.blockTile.x -= 2;
       } else {
-        sceneState.blockPosition.x -= 1;
+        sceneState.blockTile.x -= 1;
       }
     };
 
@@ -355,12 +366,12 @@ const onContentLoaded = () => {
     const moveRightComplete = () => {
       if (sceneState.blockOrientation === 'x') {
         sceneState.blockOrientation = 'y';
-        sceneState.blockPosition.x += 1.5;
+        sceneState.blockTile.x += 2;
       } else if (sceneState.blockOrientation === 'y') {
         sceneState.blockOrientation = 'x';
-        sceneState.blockPosition.x += 1.5;
+        sceneState.blockTile.x += 1;
       } else {
-        sceneState.blockPosition.x += 1.0;
+        sceneState.blockTile.x += 1;
       }
     };
 
@@ -396,12 +407,12 @@ const onContentLoaded = () => {
     const moveDownComplete = () => {
       if (sceneState.blockOrientation === 'y') {
         sceneState.blockOrientation = 'z';
-        sceneState.blockPosition.y -= 1.5;
+        sceneState.blockTile.y += 1;
       } else if (sceneState.blockOrientation === 'z') {
         sceneState.blockOrientation = 'y';
-        sceneState.blockPosition.y -= 1.5;
+        sceneState.blockTile.y += 2;
       } else {
-        sceneState.blockPosition.y -= 1.0;
+        sceneState.blockTile.y += 1;
       }
     }
 
@@ -437,12 +448,12 @@ const onContentLoaded = () => {
     const moveUpComplete = () => {
       if (sceneState.blockOrientation === 'y') {
         sceneState.blockOrientation = 'z';
-        sceneState.blockPosition.y += 1.5;
+        sceneState.blockTile.y -= 2;
       } else if (sceneState.blockOrientation === 'z') {
         sceneState.blockOrientation = 'y';
-        sceneState.blockPosition.y += 1.5;
+        sceneState.blockTile.y -= 1;
       } else {
-        sceneState.blockPosition.y += 1.0;
+        sceneState.blockTile.y -= 1;
       }
     };
 
