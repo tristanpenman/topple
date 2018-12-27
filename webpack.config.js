@@ -37,7 +37,6 @@ var config = {
     app: './index.ts'
   },
   externals: {
-    cannon: true,
     earcut: true,
     oimo: true
   },
