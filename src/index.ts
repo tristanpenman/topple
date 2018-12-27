@@ -3,7 +3,7 @@ import { cloneDeep } from 'lodash';
 
 type Axis = 'x' | 'y' | 'z';
 
-type Tile = 0 | 1;
+type Tile = 0 | 1 | 2;
 
 type Grid = Tile[][];
 
@@ -37,7 +37,7 @@ const level: Level = {
     [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 1, 1, 1, 0, 0],
     [0, 1, 1, 1, 0, 0, 0],
-    [0, 1, 1, 1, 1, 1, 0],
+    [0, 1, 1, 1, 2, 1, 0],
     [0, 0, 0, 0, 0, 0, 0]
   ]
 };
@@ -136,7 +136,7 @@ const onContentLoaded = () => {
           tileMesh.position.y = -0.05;
           tileMesh.material = tileMaterial;
           tileMeshes.push(tileMesh);
-        } else {
+        } else if (cell === 0) {
           const tileMesh = BABYLON.MeshBuilder.CreateBox(name, blueShape, scene);
           tileMesh.receiveShadows = true;
           tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
@@ -144,6 +144,13 @@ const onContentLoaded = () => {
           tileMesh.position.y = -0.06;
           tileMesh.material = blueMaterial;
           tileMeshes.push(tileMesh);
+        } else {
+          const exitMesh = BABYLON.Mesh.CreateBox('exit', 1, scene, false, BABYLON.Mesh.BACKSIDE);
+          exitMesh.receiveShadows = true;
+          exitMesh.position.x = cellIndex - extents.width / 2 + 0.5;
+          exitMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
+          exitMesh.position.y = -0.5;
+          tileMeshes.push(exitMesh);
         }
       });
     });
