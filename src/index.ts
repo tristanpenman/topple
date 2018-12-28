@@ -1,5 +1,6 @@
 import * as BABYLON from 'babylonjs';
 import { cloneDeep } from 'lodash';
+import field from './shaders/field';
 
 type Axis = 'x' | 'y' | 'z';
 
@@ -42,9 +43,12 @@ const level: Level = {
   ]
 };
 
+BABYLON.Effect.ShadersStore['fieldVertexShader'] = field.vs;
+BABYLON.Effect.ShadersStore['fieldFragmentShader'] = field.fs;
+
 const onContentLoaded = () => {
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-  const fpsLabel = document.getElementById("fpsLabel");
+  const fpsLabel = document.getElementById('fpsLabel');
 
   // Handle window resize events, with high DPI display support
   const resize = () => {
@@ -100,12 +104,41 @@ const onContentLoaded = () => {
     };
 
     const scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+    scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
+    scene.fogColor = new BABYLON.Color3();
+
     const gravityVector = new BABYLON.Vector3(0, -9.81, 0);
     const physicsPlugin = new BABYLON.CannonJSPlugin();
     scene.enablePhysics(gravityVector, physicsPlugin);
 
+    // Create custom shader material for electric field
+    const fieldTexture = new BABYLON.Texture('assets/field.jpg', scene);
+    const fieldMaterial = new BABYLON.ShaderMaterial('fieldMaterial', scene, {
+      vertex: 'field',
+      fragment: 'field',
+    }, {
+      attributes: ['position', 'normal', 'uv', 'uSpeed', 'vSpeed', 'uScale', 'vScale'],
+      uniforms: ['world', 'worldView', 'worldViewProjection', 'view', 'projection', 'time', 'vFogInfos', 'vFogColor']
+    });
+
+    fieldMaterial.needAlphaBlending = () => true;
+    fieldMaterial.onBind = function(mesh: BABYLON.AbstractMesh) {
+      const effect = fieldMaterial.getEffect();
+      effect.setMatrix('view', scene.getViewMatrix());
+      effect.setFloat4('vFogInfos', scene.fogMode, scene.fogStart, scene.fogEnd, scene.fogDensity);
+      effect.setColor3('vFogColor', scene.fogColor);
+    };
+
+    fieldMaterial.setFloat('time', 0);
+    fieldMaterial.setFloat('uSpeed', 0.02);
+    fieldMaterial.setFloat('uScale', 50);
+    fieldMaterial.setFloat('vSpeed', 0.02);
+    fieldMaterial.setFloat('vScale', 50);
+    fieldMaterial.setTexture('textureSampler', fieldTexture);
+
     // Create a simple camera, looking over the scene
-    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 1.5, Math.PI / 4, 10, BABYLON.Vector3.Zero(), scene);
+    const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 1.5, Math.PI / 4, 10, BABYLON.Vector3.Zero(), scene);
     camera.attachControl(canvas, false);
     camera.inputs.remove(camera.inputs.attached.keyboard);
 
@@ -114,16 +147,18 @@ const onContentLoaded = () => {
     ambientLight.intensity = 0.3;
 
     // Non-specular material for tiles
-    const tileMaterial = new BABYLON.StandardMaterial("tileMaterial", scene);
-    tileMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
-    tileMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    const metalTexture = new BABYLON.Texture('assets/metal.jpg', scene);
+    const metalMaterial = new BABYLON.StandardMaterial('metalMaterial', scene);
+    metalMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    metalMaterial.diffuseTexture = metalTexture;
+    metalMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    metalMaterial.fogEnabled = false;
 
-    const blueMaterial = new BABYLON.StandardMaterial("blueMaterial", scene);
-    blueMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.6, 1);
-    blueMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    const fieldMesh = BABYLON.Mesh.CreateGround('fieldMesh', 100, 100, 0, scene);
+    fieldMesh.material = fieldMaterial;
+    fieldMesh.position.y = -0.01;
 
-    const greyShape = {width: 1, depth: 1, height: 0.1};
-    const blueShape = {width: 1, depth: 1, height: 0.08};
+    const greyShape = {width: 1, depth: 1, height: 0.3};
     const tileMeshes: BABYLON.Mesh[] = [];
     level.grid.forEach((row, rowIndex) => {
       row.forEach((cell, cellIndex) => {
@@ -133,32 +168,18 @@ const onContentLoaded = () => {
           tileMesh.receiveShadows = true;
           tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
           tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
-          tileMesh.position.y = -0.05;
-          tileMesh.material = tileMaterial;
+          tileMesh.position.y = -0.15;
+          tileMesh.material = metalMaterial;
           tileMeshes.push(tileMesh);
-        } else if (cell === 0) {
-          const tileMesh = BABYLON.MeshBuilder.CreateBox(name, blueShape, scene);
-          tileMesh.receiveShadows = true;
-          tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
-          tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
-          tileMesh.position.y = -0.06;
-          tileMesh.material = blueMaterial;
-          tileMeshes.push(tileMesh);
-        } else {
-          const exitMesh = BABYLON.Mesh.CreateBox('exit', 1, scene, false, BABYLON.Mesh.BACKSIDE);
-          exitMesh.receiveShadows = true;
-          exitMesh.position.x = cellIndex - extents.width / 2 + 0.5;
-          exitMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
-          exitMesh.position.y = -0.5;
-          tileMeshes.push(exitMesh);
         }
       });
     });
 
     // Colored material for block
-    const blockMaterial = new BABYLON.StandardMaterial("blockMaterial", scene);
+    const blockMaterial = new BABYLON.StandardMaterial('blockMaterial', scene);
     blockMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.3, 1);
     blockMaterial.specularColor = new BABYLON.Color3(0.5, 0.6, 0.87);
+    blockMaterial.fogEnabled = false;
 
     // Rottation gizmo
     var gizmo = BABYLON.Mesh.CreateSphere('gizmo', 6, 0.1, scene);
@@ -176,13 +197,13 @@ const onContentLoaded = () => {
     pointLight1.includedOnlyMeshes = tileMeshes;
 
     // Define an animation for rotation about the X axis
-    const rotationX = new BABYLON.Animation("rotationX", "rotation.x", 120,
+    const rotationX = new BABYLON.Animation('rotationX', 'rotation.x', 120,
       BABYLON.Animation.ANIMATIONTYPE_FLOAT,
       BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
     );
 
     // Define an animation for rotation about the Z axis
-    const rotationZ = new BABYLON.Animation("rotationZ", "rotation.z", 120,
+    const rotationZ = new BABYLON.Animation('rotationZ', 'rotation.z', 120,
       BABYLON.Animation.ANIMATIONTYPE_FLOAT,
       BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
     );
@@ -513,6 +534,12 @@ const onContentLoaded = () => {
 
     // TODO: Check whether initial position should result in an explosion
 
+    var time = 0;
+    scene.registerBeforeRender(function () {
+      time += 0.1;
+      fieldMaterial.setFloat('time', time);
+    });
+
     return scene;
   };
 
@@ -525,7 +552,7 @@ const onContentLoaded = () => {
 
   // Update FPS counter once per second
   setInterval(() => {
-    fpsLabel.innerHTML = engine.getFps().toFixed() + " fps";
+    fpsLabel.innerHTML = engine.getFps().toFixed() + ' fps';
   }, 1000);
 
   engine.runRenderLoop(() => {
