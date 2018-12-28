@@ -18,6 +18,7 @@ interface SceneState {
   animating: boolean;
   blockOrientation: Axis;
   blockTile: BABYLON.Vector2;
+  exploded: boolean;
   grid: Grid;
 }
 
@@ -100,6 +101,7 @@ const onContentLoaded = () => {
       animating: false,
       blockOrientation: level.initialOrientation,
       blockTile: level.initialTile.clone(),
+      exloded: false,
       grid: cloneDeep(level.grid)
     };
 
@@ -144,7 +146,7 @@ const onContentLoaded = () => {
 
     // Create a basic light, aiming 0, 1, 0 - meaning, to the sky
     const ambientLight = new BABYLON.HemisphericLight('ambientLight', new BABYLON.Vector3(0, 1, 0), scene);
-    ambientLight.intensity = 0.3;
+    ambientLight.intensity = 0.5;
 
     // Non-specular material for tiles
     const metalTexture = new BABYLON.Texture('assets/metal.jpg', scene);
@@ -278,6 +280,8 @@ const onContentLoaded = () => {
     };
 
     const explodeBlock = () => {
+      sceneState.exploded = true;
+
       // Swap solid block for individual pieces
       piecesMesh.setEnabled(true);
       blockMesh.setEnabled(false);
@@ -313,13 +317,19 @@ const onContentLoaded = () => {
       // TODO: Animate transparency
     };
 
+    const isExplosiveTile = (blockTile: BABYLON.Vector2, grid: Grid) =>
+        blockTile.y > grid.length - 1 ||
+        blockTile.y < 0 ||
+        blockTile.x > grid[blockTile.y].length - 1 ||
+        blockTile.x < 0 ||
+        grid[blockTile.y][blockTile.x] === 0;
+
     const checkBlock = () => {
       const shouldExplode =
-        sceneState.blockTile.y > sceneState.grid.length - 1 ||
-        sceneState.blockTile.y < 0 ||
-        sceneState.blockTile.x > sceneState.grid[sceneState.blockTile.y].length - 1 ||
-        sceneState.blockTile.x < 0 ||
-        sceneState.grid[sceneState.blockTile.y][sceneState.blockTile.x] === 0;
+        isExplosiveTile(sceneState.blockTile, sceneState.grid) ||
+        (sceneState.blockOrientation === 'x' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid)) ||
+        (sceneState.blockOrientation === 'z' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid));
+
       if (shouldExplode) {
         explodeBlock();
       }
@@ -512,6 +522,10 @@ const onContentLoaded = () => {
     };
 
     scene.onKeyboardObservable.add((kbInfo) => {
+      if (sceneState.exploded) {
+        return;
+      }
+
       if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
         switch (kbInfo.event.key) {
           case 'ArrowDown':
