@@ -101,7 +101,7 @@ const onContentLoaded = () => {
       animating: false,
       blockOrientation: level.initialOrientation,
       blockTile: level.initialTile.clone(),
-      exloded: false,
+      exploded: false,
       grid: cloneDeep(level.grid)
     };
 
@@ -156,6 +156,13 @@ const onContentLoaded = () => {
     metalMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
     metalMaterial.fogEnabled = false;
 
+    const targetTexture = new BABYLON.Texture('assets/target.jpg', scene);
+    const targetMaterial = new BABYLON.StandardMaterial('targetMaterial', scene);
+    targetMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    targetMaterial.diffuseTexture = targetTexture;
+    targetMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    targetMaterial.fogEnabled = false;
+
     const fieldMesh = BABYLON.Mesh.CreateGround('fieldMesh', 100, 100, 0, scene);
     fieldMesh.material = fieldMaterial;
     fieldMesh.position.y = -0.01;
@@ -173,14 +180,23 @@ const onContentLoaded = () => {
           tileMesh.position.y = -0.15;
           tileMesh.material = metalMaterial;
           tileMeshes.push(tileMesh);
+        } else if (cell === 2) {
+          const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
+          tileMesh.receiveShadows = true;
+          tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
+          tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
+          tileMesh.position.y = -0.15;
+          tileMesh.material = targetMaterial;
+          tileMeshes.push(tileMesh);
         }
       });
     });
 
     // Colored material for block
     const blockMaterial = new BABYLON.StandardMaterial('blockMaterial', scene);
-    blockMaterial.diffuseColor = new BABYLON.Color3(0.8, 0.3, 1);
-    blockMaterial.specularColor = new BABYLON.Color3(0.5, 0.6, 0.87);
+    blockMaterial.diffuseTexture = new BABYLON.Texture('assets/block.jpg', scene);
+    blockMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    blockMaterial.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
     blockMaterial.fogEnabled = false;
 
     // Rottation gizmo
