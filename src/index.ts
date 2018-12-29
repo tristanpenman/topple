@@ -97,6 +97,13 @@ const onContentLoaded = () => {
   }
 
   const createScene = function(engine: BABYLON.Engine, level: Level) {
+
+    // ---------------------------------------------------------------------------------------------
+    //
+    // Basic setup
+    //
+    // ---------------------------------------------------------------------------------------------
+
     const sceneState: SceneState = {
       animating: false,
       blockOrientation: level.initialOrientation,
@@ -229,61 +236,11 @@ const onContentLoaded = () => {
     const pointLight2 = new BABYLON.PointLight('pointLight2', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight2.intensity = 0.4;
 
-    const explode = (mesh: BABYLON.AbstractMesh, alpha: number, beta: number, delta: number, scale: number) => {
-      // Calculate force to apply, using _alpha_ to weight the force along the Y axis, and _beta_
-      // to modulate some random jitter that is applied on the X axis and Z axis. This value is
-      // normalised before finally being scaled by _scale_.
-      const force = mesh.position.clone();
-      force.x += (Math.random() - 0.5) * beta;
-      force.y += alpha;
-      force.z += (Math.random() - 0.5) * beta;
-      force.normalize().scaleInPlace(scale);
-
-      // Calculate the contact point, using _delta_ to weight how much the position of the mesh in
-      // its local coordinate system should affect the position of the contact point.
-      const contactPoint = mesh.getAbsolutePosition();
-      contactPoint.x += mesh.position.x * delta;
-      contactPoint.z += mesh.position.z * delta;
-
-      mesh.applyImpulse(force, contactPoint);
-    };
-
-    const explodeBlock = () => {
-      sceneState.mode = 'exploded';
-
-      // Swap solid block for individual pieces
-      piecesMesh.setEnabled(true);
-      blockMesh.setEnabled(false);
-
-      pieces.forEach((piece, index) => {
-        if (index === 0) {
-          // Create a physics object for the first piece, ignoring the position of it's parent
-          piece.physicsImpostor = new BABYLON.PhysicsImpostor(piece, BABYLON.PhysicsImpostor.BoxImpostor, {
-            mass: 1,
-            friction: 0.4,
-            restitution: 0.5,
-            ignoreParent: true
-          }, scene);
-        } else {
-          // Clone that physics imposter for the remaining pieces
-          piece.physicsImpostor = pieces[0].physicsImpostor.clone(piece);
-        }
-      });
-
-      // Explosion characteristics
-      const alpha = 6;
-      const beta = sceneState.blockOrientation === 'y' ? 8 : 4;
-      const delta = -0.5;
-      const scaleBase = 5;
-      const scaleVariability = 3;
-
-      // Apply an explosive impulse each piece
-      pieces.forEach(piece => {
-        explode(piece, alpha, beta, delta, scaleBase + scaleVariability * Math.random());
-      });
-
-      // TODO: Animate transparency
-    };
+    // ---------------------------------------------------------------------------------------------
+    //
+    // Level setup
+    //
+    // ---------------------------------------------------------------------------------------------
 
     const resetTransformations = () => {
       const blockPosition = calculateBlockPosition(sceneState.blockTile, sceneState.blockOrientation, extents);
@@ -394,6 +351,68 @@ const onContentLoaded = () => {
       blockMesh.setEnabled(true);
     };
 
+    // ---------------------------------------------------------------------------------------------
+    //
+    // Dynamic behaviours
+    //
+    // ---------------------------------------------------------------------------------------------
+
+    const explode = (mesh: BABYLON.AbstractMesh, alpha: number, beta: number, delta: number, scale: number) => {
+      // Calculate force to apply, using _alpha_ to weight the force along the Y axis, and _beta_
+      // to modulate some random jitter that is applied on the X axis and Z axis. This value is
+      // normalised before finally being scaled by _scale_.
+      const force = mesh.position.clone();
+      force.x += (Math.random() - 0.5) * beta;
+      force.y += alpha;
+      force.z += (Math.random() - 0.5) * beta;
+      force.normalize().scaleInPlace(scale);
+
+      // Calculate the contact point, using _delta_ to weight how much the position of the mesh in
+      // its local coordinate system should affect the position of the contact point.
+      const contactPoint = mesh.getAbsolutePosition();
+      contactPoint.x += mesh.position.x * delta;
+      contactPoint.z += mesh.position.z * delta;
+
+      mesh.applyImpulse(force, contactPoint);
+    };
+
+    const explodeBlock = () => {
+      sceneState.mode = 'exploded';
+
+      // Swap solid block for individual pieces
+      piecesMesh.setEnabled(true);
+      blockMesh.setEnabled(false);
+
+      pieces.forEach((piece, index) => {
+        if (index === 0) {
+          // Create a physics object for the first piece, ignoring the position of it's parent
+          piece.physicsImpostor = new BABYLON.PhysicsImpostor(piece, BABYLON.PhysicsImpostor.BoxImpostor, {
+            mass: 1,
+            friction: 0.4,
+            restitution: 0.5,
+            ignoreParent: true
+          }, scene);
+        } else {
+          // Clone that physics imposter for the remaining pieces
+          piece.physicsImpostor = pieces[0].physicsImpostor.clone(piece);
+        }
+      });
+
+      // Explosion characteristics
+      const alpha = 6;
+      const beta = sceneState.blockOrientation === 'y' ? 8 : 4;
+      const delta = -0.5;
+      const scaleBase = 5;
+      const scaleVariability = 3;
+
+      // Apply an explosive impulse each piece
+      pieces.forEach(piece => {
+        explode(piece, alpha, beta, delta, scaleBase + scaleVariability * Math.random());
+      });
+
+      // TODO: Animate transparency
+    };
+
     const isExplosiveTile = (blockTile: BABYLON.Vector2, grid: Grid) =>
       blockTile.y > grid.length - 1 ||
       blockTile.y < 0 ||
@@ -402,6 +421,8 @@ const onContentLoaded = () => {
       grid[blockTile.y][blockTile.x] === 0;
 
     const checkBlock = () => {
+      resetTransformations();
+
       const didWin =
         sceneState.blockOrientation === 'y' &&
         sceneState.blockTile.y < sceneState.grid.length - 1 &&
@@ -426,6 +447,12 @@ const onContentLoaded = () => {
         }, 3000);
       }
     }
+
+    // ---------------------------------------------------------------------------------------------
+    //
+    // Keyboard actions
+    //
+    // ---------------------------------------------------------------------------------------------
 
     const moveGizmoToXMin = () => {
       if (sceneState.blockOrientation === 'x') {
@@ -462,7 +489,6 @@ const onContentLoaded = () => {
           sceneState.animating = false;
           gizmo.animations.pop();
           moveLeftComplete();
-          resetTransformations();
           checkBlock();
         });
       }
@@ -503,7 +529,6 @@ const onContentLoaded = () => {
           sceneState.animating = false;
           gizmo.animations.pop();
           moveRightComplete();
-          resetTransformations();
           checkBlock();
         })
       }
@@ -544,7 +569,6 @@ const onContentLoaded = () => {
           sceneState.animating = false;
           gizmo.animations.pop();
           moveDownComplete();
-          resetTransformations();
           checkBlock();
         });
       }
@@ -585,7 +609,6 @@ const onContentLoaded = () => {
           sceneState.animating = false;
           gizmo.animations.pop();
           moveUpComplete();
-          resetTransformations();
           checkBlock();
         });
       }
@@ -613,6 +636,12 @@ const onContentLoaded = () => {
         }
       }
     });
+
+    // ---------------------------------------------------------------------------------------------
+    //
+    // Startup
+    //
+    // ---------------------------------------------------------------------------------------------
 
     resetLevel();
     checkBlock();
