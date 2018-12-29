@@ -23,6 +23,7 @@ interface SceneState {
   grid: Grid;
   mode: Mode;
   tileMeshes: BABYLON.AbstractMesh[];
+  time: number;
 }
 
 interface Extents {
@@ -102,7 +103,8 @@ const onContentLoaded = () => {
       blockTile: level.initialTile.clone(),
       grid: cloneDeep(level.grid),
       mode: 'loading',
-      tileMeshes: []
+      tileMeshes: [],
+      time: 0
     };
 
     // Calculate position of block based on effective size of the grid, adopting the convention
@@ -613,13 +615,11 @@ const onContentLoaded = () => {
     });
 
     resetLevel();
+    checkBlock();
 
-    // TODO: Check whether initial position should result in an explosion
-
-    var time = 0;
     scene.registerBeforeRender(function () {
-      time += 0.1;
-      fieldMaterial.setFloat('time', time);
+      sceneState.time += 0.1;
+      fieldMaterial.setFloat('time', sceneState.time);
     });
 
     return scene;
