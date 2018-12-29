@@ -8,6 +8,8 @@ type Tile = 0 | 1 | 2;
 
 type Grid = Tile[][];
 
+type Mode = 'loading' | 'playing' | 'exploded' | 'finished';
+
 interface Level {
   initialOrientation: Axis;
   initialTile: BABYLON.Vector2;
@@ -18,8 +20,9 @@ interface SceneState {
   animating: boolean;
   blockOrientation: Axis;
   blockTile: BABYLON.Vector2;
-  exploded: boolean;
   grid: Grid;
+  mode: Mode;
+  tileMeshes: BABYLON.AbstractMesh[];
 }
 
 interface Extents {
@@ -93,23 +96,26 @@ const onContentLoaded = () => {
   }
 
   const createScene = function(engine: BABYLON.Engine, level: Level) {
-    // Calculate position of block based on effective size of the grid, adopting the convention
-    // that tile (0, 0) is the furthest and left-most tile on the player's screen
-    const extents = findExtents(level.grid);
-
     const sceneState: SceneState = {
       animating: false,
       blockOrientation: level.initialOrientation,
       blockTile: level.initialTile.clone(),
-      exploded: false,
-      grid: cloneDeep(level.grid)
+      grid: cloneDeep(level.grid),
+      mode: 'loading',
+      tileMeshes: []
     };
 
+    // Calculate position of block based on effective size of the grid, adopting the convention
+    // that tile (0, 0) is the furthest and left-most tile on the player's screen
+    const extents = findExtents(level.grid);
+
+    // Create scene and configure environment
     const scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
     scene.fogMode = BABYLON.Scene.FOGMODE_EXP;
     scene.fogColor = new BABYLON.Color3();
 
+    // Set up physics
     const gravityVector = new BABYLON.Vector3(0, -9.81, 0);
     const physicsPlugin = new BABYLON.CannonJSPlugin();
     scene.enablePhysics(gravityVector, physicsPlugin);
@@ -163,35 +169,6 @@ const onContentLoaded = () => {
     targetMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
     targetMaterial.fogEnabled = false;
 
-    const fieldMesh = BABYLON.Mesh.CreateGround('fieldMesh', 100, 100, 0, scene);
-    fieldMesh.material = fieldMaterial;
-    fieldMesh.position.y = -0.01;
-
-    const greyShape = {width: 1, depth: 1, height: 0.3};
-    const tileMeshes: BABYLON.Mesh[] = [];
-    level.grid.forEach((row, rowIndex) => {
-      row.forEach((cell, cellIndex) => {
-        const name = `tile[row=${rowIndex},col=${cellIndex}`;
-        if (cell === 1) {
-          const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
-          tileMesh.receiveShadows = true;
-          tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
-          tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
-          tileMesh.position.y = -0.15;
-          tileMesh.material = metalMaterial;
-          tileMeshes.push(tileMesh);
-        } else if (cell === 2) {
-          const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
-          tileMesh.receiveShadows = true;
-          tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
-          tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
-          tileMesh.position.y = -0.15;
-          tileMesh.material = targetMaterial;
-          tileMeshes.push(tileMesh);
-        }
-      });
-    });
-
     // Colored material for block
     const blockMaterial = new BABYLON.StandardMaterial('blockMaterial', scene);
     blockMaterial.diffuseTexture = new BABYLON.Texture('assets/block.jpg', scene);
@@ -199,7 +176,12 @@ const onContentLoaded = () => {
     blockMaterial.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
     blockMaterial.fogEnabled = false;
 
-    // Rottation gizmo
+    // Create mesh for force field
+    const fieldMesh = BABYLON.Mesh.CreateGround('fieldMesh', 100, 100, 0, scene);
+    fieldMesh.material = fieldMaterial;
+    fieldMesh.position.y = -0.01;
+
+    // Rotation gizmo
     var gizmo = BABYLON.Mesh.CreateSphere('gizmo', 6, 0.1, scene);
     gizmo.visibility = 0;
 
@@ -212,7 +194,6 @@ const onContentLoaded = () => {
     const pointLight1 = new BABYLON.PointLight('pointLight1', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight1.intensity = 0.4;
     pointLight1.shadowEnabled = true;
-    pointLight1.includedOnlyMeshes = tileMeshes;
 
     // Define an animation for rotation about the X axis
     const rotationX = new BABYLON.Animation('rotationX', 'rotation.x', 120,
@@ -233,48 +214,18 @@ const onContentLoaded = () => {
     piecesMesh.visibility = 0;
     piecesMesh.setEnabled(false);
 
+    const pieces: BABYLON.AbstractMesh[] = [];
+
     // Create the first piece
     const piecesPerUnit = 2;
-    const piece = BABYLON.Mesh.CreateBox(`piece`, 1.0 / piecesPerUnit, scene);
-    piece.parent = piecesMesh;
-    piece.material = blockMaterial;
-    piece.position.x = -0.75;
-    piece.position.y = -0.25;
-    piece.position.z = -0.25;
-
-    // Create the remaining pieces as instances of the mesh for the first piece
-    const pieceInstances: BABYLON.InstancedMesh[] = [];
-    for (var x = 0; x < piecesPerUnit * 2; x++) {
-      for (var y = 0; y < piecesPerUnit; y++) {
-        for (var z = 0; z < piecesPerUnit; z++) {
-          if (x > 0 || y > 0 || z > 0) {
-            const pieceInstance = piece.createInstance(`pieceInstance[x=${x},y=${y},z=${z}]`);
-            pieceInstance.parent = piecesMesh;
-            pieceInstance.position.x = (x - piecesPerUnit) / piecesPerUnit + 0.25;
-            pieceInstance.position.y = y / piecesPerUnit - 0.25;
-            pieceInstance.position.z = (z - piecesPerUnit) / piecesPerUnit + 0.75;
-            pieceInstances.push(pieceInstance);
-          }
-        }
-      }
-    }
 
     // Use shadow generator to cast shadows from block/piece meshes on to tiles
     const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight1);
     shadowGenerator.forceBackFacesOnly = true;
-    shadowGenerator.getShadowMap().renderList.push(...pieceInstances, piece, blockMesh);
 
     // Point light for the lighting the block and piece meshes
     const pointLight2 = new BABYLON.PointLight('pointLight2', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight2.intensity = 0.4;
-    pointLight2.includedOnlyMeshes = [...pieceInstances, piece, blockMesh];
-
-    // Create static physics objects for each of the tiles (saves time later)
-    tileMeshes.forEach(tileMesh => {
-      tileMesh.physicsImpostor = new BABYLON.PhysicsImpostor(tileMesh, BABYLON.PhysicsImpostor.BoxImpostor, {
-        mass: 0
-      }, scene);
-    });
 
     const explode = (mesh: BABYLON.AbstractMesh, alpha: number, beta: number, delta: number, scale: number) => {
       // Calculate force to apply, using _alpha_ to weight the force along the Y axis, and _beta_
@@ -296,23 +247,25 @@ const onContentLoaded = () => {
     };
 
     const explodeBlock = () => {
-      sceneState.exploded = true;
+      sceneState.mode = 'exploded';
 
       // Swap solid block for individual pieces
       piecesMesh.setEnabled(true);
       blockMesh.setEnabled(false);
 
-      // Create a physics object for the first piece, ignoring the position of it's parent
-      piece.physicsImpostor = new BABYLON.PhysicsImpostor(piece, BABYLON.PhysicsImpostor.BoxImpostor, {
-        mass: 1,
-        friction: 0.4,
-        restitution: 0.5,
-        ignoreParent: true
-      }, scene);
-
-      // Clone that physics imposter for the remaining pieces
-      pieceInstances.forEach(pieceInstance => {
-        pieceInstance.physicsImpostor = piece.physicsImpostor.clone(pieceInstance)
+      pieces.forEach((piece, index) => {
+        if (index === 0) {
+          // Create a physics object for the first piece, ignoring the position of it's parent
+          piece.physicsImpostor = new BABYLON.PhysicsImpostor(piece, BABYLON.PhysicsImpostor.BoxImpostor, {
+            mass: 1,
+            friction: 0.4,
+            restitution: 0.5,
+            ignoreParent: true
+          }, scene);
+        } else {
+          // Clone that physics imposter for the remaining pieces
+          piece.physicsImpostor = pieces[0].physicsImpostor.clone(piece);
+        }
       });
 
       // Explosion characteristics
@@ -322,34 +275,13 @@ const onContentLoaded = () => {
       const scaleBase = 5;
       const scaleVariability = 3;
 
-      // Apply an explosive impulse to the first piece
-      explode(piece, alpha, beta, delta, scaleBase + scaleVariability * Math.random());
-
-      // And do so for the remaining pieces
-      pieceInstances.forEach(pieceInstance => {
-        explode(pieceInstance, alpha, beta, delta, scaleBase + scaleVariability * Math.random());
+      // Apply an explosive impulse each piece
+      pieces.forEach(piece => {
+        explode(piece, alpha, beta, delta, scaleBase + scaleVariability * Math.random());
       });
 
       // TODO: Animate transparency
     };
-
-    const isExplosiveTile = (blockTile: BABYLON.Vector2, grid: Grid) =>
-        blockTile.y > grid.length - 1 ||
-        blockTile.y < 0 ||
-        blockTile.x > grid[blockTile.y].length - 1 ||
-        blockTile.x < 0 ||
-        grid[blockTile.y][blockTile.x] === 0;
-
-    const checkBlock = () => {
-      const shouldExplode =
-        isExplosiveTile(sceneState.blockTile, sceneState.grid) ||
-        (sceneState.blockOrientation === 'x' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid)) ||
-        (sceneState.blockOrientation === 'z' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid));
-
-      if (shouldExplode) {
-        explodeBlock();
-      }
-    }
 
     const resetTransformations = () => {
       const blockPosition = calculateBlockPosition(sceneState.blockTile, sceneState.blockOrientation, extents);
@@ -372,6 +304,126 @@ const onContentLoaded = () => {
         blockMesh.position.z = 0;
       }
     };
+
+    const resetPieces = () => {
+      piecesMesh.setEnabled(false);
+
+      while (pieces.length > 0) {
+        pieces.pop().dispose();
+      }
+
+      const piece = BABYLON.Mesh.CreateBox(`piece`, 1.0 / piecesPerUnit, scene);
+      piece.parent = piecesMesh;
+      piece.material = blockMaterial;
+      piece.position.x = -0.75;
+      piece.position.y = -0.25;
+      piece.position.z = -0.25;
+      pieces.push(piece);
+
+      for (var x = 0; x < piecesPerUnit * 2; x++) {
+        for (var y = 0; y < piecesPerUnit; y++) {
+          for (var z = 0; z < piecesPerUnit; z++) {
+            if (x > 0 || y > 0 || z > 0) {
+              const pieceInstance = piece.createInstance(`pieceInstance[x=${x},y=${y},z=${z}]`);
+              pieceInstance.parent = piecesMesh;
+              pieceInstance.position.x = (x - piecesPerUnit) / piecesPerUnit + 0.25;
+              pieceInstance.position.y = y / piecesPerUnit - 0.25;
+              pieceInstance.position.z = (z - piecesPerUnit) / piecesPerUnit + 0.75;
+              pieces.push(pieceInstance);
+            }
+          }
+        }
+      }
+
+      pointLight2.includedOnlyMeshes = [...pieces, blockMesh];
+
+      shadowGenerator.getShadowMap().renderList = [...pieces, blockMesh];
+    }
+
+    const resetLevel = () => {
+      pointLight1.includedOnlyMeshes = [];
+      while(sceneState.tileMeshes.length > 0) {
+        sceneState.tileMeshes.pop().dispose();
+      }
+
+      const greyShape = {width: 1, depth: 1, height: 0.3};
+      level.grid.forEach((row, rowIndex) => {
+        row.forEach((cell, cellIndex) => {
+          const name = `tile[row=${rowIndex},col=${cellIndex}`;
+          if (cell === 1) {
+            const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
+            tileMesh.receiveShadows = true;
+            tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
+            tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
+            tileMesh.position.y = -0.15;
+            tileMesh.material = metalMaterial;
+            sceneState.tileMeshes.push(tileMesh);
+          } else if (cell === 2) {
+            const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
+            tileMesh.receiveShadows = true;
+            tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
+            tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
+            tileMesh.position.y = -0.15;
+            tileMesh.material = targetMaterial;
+            sceneState.tileMeshes.push(tileMesh);
+          }
+        });
+      });
+
+      pointLight1.includedOnlyMeshes = sceneState.tileMeshes;
+
+      // Create static physics objects for each of the tiles (saves time later)
+      sceneState.tileMeshes.forEach(tileMesh => {
+        tileMesh.physicsImpostor = new BABYLON.PhysicsImpostor(tileMesh, BABYLON.PhysicsImpostor.BoxImpostor, {
+          mass: 0
+        }, scene);
+      });
+
+      sceneState.blockOrientation = level.initialOrientation;
+      sceneState.blockTile = level.initialTile.clone();
+      sceneState.mode = 'playing';
+
+      // Re-activate the force field
+      fieldMesh.material = fieldMaterial;
+
+      resetTransformations();
+      resetPieces();
+
+      blockMesh.setEnabled(true);
+    };
+
+    const isExplosiveTile = (blockTile: BABYLON.Vector2, grid: Grid) =>
+      blockTile.y > grid.length - 1 ||
+      blockTile.y < 0 ||
+      blockTile.x > grid[blockTile.y].length - 1 ||
+      blockTile.x < 0 ||
+      grid[blockTile.y][blockTile.x] === 0;
+
+    const checkBlock = () => {
+      const didWin =
+        sceneState.blockOrientation === 'y' &&
+        sceneState.blockTile.y < sceneState.grid.length - 1 &&
+        sceneState.blockTile.x < sceneState.grid[sceneState.blockTile.y].length - 1 &&
+        sceneState.grid[sceneState.blockTile.y][sceneState.blockTile.x] === 2;
+      if (didWin) {
+        sceneState.mode = 'finished';
+        fieldMesh.material = null;
+        setTimeout(() => {
+          resetLevel();
+        }, 1000);
+      }
+
+      const shouldExplode =
+        isExplosiveTile(sceneState.blockTile, sceneState.grid) ||
+        (sceneState.blockOrientation === 'x' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid)) ||
+        (sceneState.blockOrientation === 'z' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid));
+      if (shouldExplode) {
+        explodeBlock();
+        setTimeout(() => {
+          resetLevel();
+        }, 3000);
+      }
+    }
 
     const moveGizmoToXMin = () => {
       if (sceneState.blockOrientation === 'x') {
@@ -538,7 +590,7 @@ const onContentLoaded = () => {
     };
 
     scene.onKeyboardObservable.add((kbInfo) => {
-      if (sceneState.exploded) {
+      if (sceneState.mode !== 'playing') {
         return;
       }
 
@@ -560,7 +612,7 @@ const onContentLoaded = () => {
       }
     });
 
-    resetTransformations();
+    resetLevel();
 
     // TODO: Check whether initial position should result in an explosion
 
