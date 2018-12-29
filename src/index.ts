@@ -4,7 +4,20 @@ import field from './shaders/field';
 
 type Axis = 'x' | 'y' | 'z';
 
-type Tile = 0 | 1 | 2;
+//
+// Key:
+//
+// 0 - empty
+// 1 - regular tile
+// 2 - exit tile
+// 3 - trigger (A)
+// 4 - tile that is only visible when trigger A is active
+// 5 - tile that is only visible when trigger A is inactive
+// 6 - trigger (B)
+// 7 - tile that is only visible when trigger B is active
+// 8 - tile that is only visible when trigger B is inactive
+//
+type Tile = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 type Grid = Tile[][];
 
@@ -16,37 +29,91 @@ interface Level {
   grid: Grid;
 }
 
-interface SceneState {
-  animating: boolean;
-  blockOrientation: Axis;
-  blockTile: BABYLON.Vector2;
-  grid: Grid;
-  mode: Mode;
-  tileMeshes: BABYLON.AbstractMesh[];
-  time: number;
-}
-
 interface Extents {
   depth: number;
   width: number;
 }
 
-const level: Level = {
+interface Triggers {
+  a: boolean;
+  b: boolean;
+}
+
+interface SceneState {
+  animating: boolean;
+  blockOrientation: Axis;
+  blockTile: BABYLON.Vector2;
+  currentLevel: number;
+  extents: Extents;
+  grid: Grid;
+  mode: Mode;
+  tileMeshes: BABYLON.AbstractMesh[];
+  time: number;
+  triggers: Triggers;
+  triggerATiles: BABYLON.AbstractMesh[];
+  triggerATilesInverted: BABYLON.AbstractMesh[];
+  triggerBTiles: BABYLON.AbstractMesh[];
+  triggerBTilesInverted: BABYLON.AbstractMesh[];
+}
+
+const level1: Level = {
   initialOrientation: 'y',
-  initialTile: new BABYLON.Vector2(2, 3),
+  initialTile: new BABYLON.Vector2(0, 0),
   grid: [
-    [0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
-    [0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0],
-    [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 1, 1, 0, 0],
-    [0, 1, 1, 1, 0, 0, 0],
-    [0, 1, 1, 1, 2, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0]
+    [1, 1, 1, 1],
+    [0, 0, 0, 1],
+    [0, 0, 0, 1],
+    [0, 0, 1, 2, 1],
+    [0, 0, 0, 1]
   ]
 };
+
+const level2: Level = {
+  initialOrientation: 'y',
+  initialTile: new BABYLON.Vector2(1, 0),
+  grid: [
+    [0, 1, 1, 1, 1],
+    [0, 1, 1, 0, 1, 1],
+    [0, 1, 0, 0, 1, 1],
+    [1, 1, 1, 0, 0, 1],
+    [1, 1, 1, 0, 1, 1],
+    [1, 1, 1, 2, 1],
+  ]
+};
+
+const level3: Level = {
+  initialOrientation: 'y',
+  initialTile: new BABYLON.Vector2(0, 0),
+  grid: [
+    [1, 1, 1, 3],
+    [4, 0, 0, 0],
+    [4, 0, 0, 1],
+    [4, 4, 1, 2, 1],
+    [0, 0, 0, 1]
+  ]
+};
+
+const level4: Level = {
+  initialOrientation: 'y',
+  initialTile: new BABYLON.Vector2(5, 0),
+  grid: [
+    [0, 0, 0, 5, 5, 5, 5],
+    [4, 1, 1, 5, 5],
+    [4, 8, 1],
+    [4, 8, 3, 0, 0],
+    [4, 4, 6, 5, 0, 0],
+    [0, 7, 7, 7, 7, 2, 1],
+    [0, 0, 0, 0, 1, 1, 1],
+    [0, 0, 0, 0, 7, 7, 7]
+  ]
+};
+
+const levels = [
+  level1,
+  level2,
+  level3,
+  level4
+];
 
 BABYLON.Effect.ShadersStore['fieldVertexShader'] = field.vs;
 BABYLON.Effect.ShadersStore['fieldFragmentShader'] = field.fs;
@@ -96,7 +163,7 @@ const onContentLoaded = () => {
     return blockPosition;
   }
 
-  const createScene = function(engine: BABYLON.Engine, level: Level) {
+  const createScene = function(engine: BABYLON.Engine, levels: Level[]) {
 
     // ---------------------------------------------------------------------------------------------
     //
@@ -106,17 +173,23 @@ const onContentLoaded = () => {
 
     const sceneState: SceneState = {
       animating: false,
-      blockOrientation: level.initialOrientation,
-      blockTile: level.initialTile.clone(),
-      grid: cloneDeep(level.grid),
+      blockOrientation: levels[0].initialOrientation,
+      blockTile: levels[0].initialTile.clone(),
+      currentLevel: 0,
+      extents: findExtents(levels[0].grid),
+      grid: cloneDeep(levels[0].grid),
       mode: 'loading',
       tileMeshes: [],
-      time: 0
+      time: 0,
+      triggers: {
+        a: false,
+        b: false
+      },
+      triggerATilesInverted: [],
+      triggerATiles: [],
+      triggerBTilesInverted: [],
+      triggerBTiles: []
     };
-
-    // Calculate position of block based on effective size of the grid, adopting the convention
-    // that tile (0, 0) is the furthest and left-most tile on the player's screen
-    const extents = findExtents(level.grid);
 
     // Create scene and configure environment
     const scene = new BABYLON.Scene(engine);
@@ -155,7 +228,7 @@ const onContentLoaded = () => {
     fieldMaterial.setTexture('textureSampler', fieldTexture);
 
     // Create a simple camera, looking over the scene
-    const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 1.5, Math.PI / 4, 10, BABYLON.Vector3.Zero(), scene);
+    const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 1.5, Math.PI / 4, 14, BABYLON.Vector3.Zero(), scene);
     camera.attachControl(canvas, false);
     camera.inputs.remove(camera.inputs.attached.keyboard);
 
@@ -170,6 +243,20 @@ const onContentLoaded = () => {
     metalMaterial.diffuseTexture = metalTexture;
     metalMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
     metalMaterial.fogEnabled = false;
+
+    const triggerATexture = new BABYLON.Texture('assets/triggera.jpg', scene);
+    const triggerAMaterial = new BABYLON.StandardMaterial('triggerAMaterial', scene);
+    triggerAMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    triggerAMaterial.diffuseTexture = triggerATexture;
+    triggerAMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    triggerAMaterial.fogEnabled = false;
+
+    const triggerBTexture = new BABYLON.Texture('assets/triggerb.jpg', scene);
+    const triggerBMaterial = new BABYLON.StandardMaterial('triggerBMaterial', scene);
+    triggerBMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    triggerBMaterial.diffuseTexture = triggerBTexture;
+    triggerBMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+    triggerBMaterial.fogEnabled = false;
 
     const targetTexture = new BABYLON.Texture('assets/target.jpg', scene);
     const targetMaterial = new BABYLON.StandardMaterial('targetMaterial', scene);
@@ -243,7 +330,12 @@ const onContentLoaded = () => {
     // ---------------------------------------------------------------------------------------------
 
     const resetTransformations = () => {
-      const blockPosition = calculateBlockPosition(sceneState.blockTile, sceneState.blockOrientation, extents);
+      const blockPosition = calculateBlockPosition(
+        sceneState.blockTile,
+        sceneState.blockOrientation,
+        sceneState.extents
+      );
+
       gizmo.position = new BABYLON.Vector3(blockPosition.x, 0.0, blockPosition.y);
       gizmo.rotation = new BABYLON.Vector3();
       if (sceneState.blockOrientation === 'x') {
@@ -305,19 +397,29 @@ const onContentLoaded = () => {
         sceneState.tileMeshes.pop().dispose();
       }
 
+      sceneState.triggerATilesInverted = [];
+      sceneState.triggerATiles = [];
+      sceneState.triggerBTilesInverted = [];
+      sceneState.triggerBTiles = [];
+      sceneState.triggers = {
+        a: false,
+        b: false
+      };
+
+      // Calculate position of block based on effective size of the grid, adopting the convention
+      // that tile (0, 0) is the furthest and left-most tile on the player's screen
+      const level = levels[sceneState.currentLevel];
+      const extents = sceneState.extents = findExtents(level.grid);
+
+      sceneState.grid = cloneDeep(level.grid);
+      sceneState.blockTile = level.initialTile.clone();
+      sceneState.blockOrientation = level.initialOrientation;
+
       const greyShape = {width: 1, depth: 1, height: 0.3};
       level.grid.forEach((row, rowIndex) => {
         row.forEach((cell, cellIndex) => {
           const name = `tile[row=${rowIndex},col=${cellIndex}`;
-          if (cell === 1) {
-            const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
-            tileMesh.receiveShadows = true;
-            tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
-            tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
-            tileMesh.position.y = -0.15;
-            tileMesh.material = metalMaterial;
-            sceneState.tileMeshes.push(tileMesh);
-          } else if (cell === 2) {
+          if (cell === 2) {
             const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
             tileMesh.receiveShadows = true;
             tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
@@ -325,6 +427,33 @@ const onContentLoaded = () => {
             tileMesh.position.y = -0.15;
             tileMesh.material = targetMaterial;
             sceneState.tileMeshes.push(tileMesh);
+          } else if (cell !== 0) {
+            const tileMesh = BABYLON.MeshBuilder.CreateBox(name, greyShape, scene);
+            tileMesh.receiveShadows = true;
+            tileMesh.position.x = cellIndex - extents.width / 2 + 0.5;
+            tileMesh.position.z = extents.depth / 2 - rowIndex - 0.5;
+            tileMesh.position.y = -0.15;
+
+            sceneState.tileMeshes.push(tileMesh);
+            if (cell === 3) {
+              tileMesh.material = triggerAMaterial;
+            } else if (cell === 6) {
+              tileMesh.material = triggerBMaterial;
+            } else {
+              tileMesh.material = metalMaterial;
+            }
+
+            if (cell === 4) {
+              tileMesh.setEnabled(false);
+              sceneState.triggerATiles.push(tileMesh);
+            } else if (cell === 7) {
+              tileMesh.setEnabled(false);
+              sceneState.triggerBTiles.push(tileMesh);
+            } else if (cell === 5) {
+              sceneState.triggerATilesInverted.push(tileMesh);
+            } else if (cell === 8) {
+              sceneState.triggerBTilesInverted.push(tileMesh);
+            }
           }
         });
       });
@@ -341,6 +470,10 @@ const onContentLoaded = () => {
       sceneState.blockOrientation = level.initialOrientation;
       sceneState.blockTile = level.initialTile.clone();
       sceneState.mode = 'playing';
+      sceneState.triggers = {
+        a: false,
+        b: false
+      };
 
       // Re-activate the force field
       fieldMesh.material = fieldMaterial;
@@ -413,38 +546,77 @@ const onContentLoaded = () => {
       // TODO: Animate transparency
     };
 
-    const isExplosiveTile = (blockTile: BABYLON.Vector2, grid: Grid) =>
+    const isExplosiveTile = (blockTile: BABYLON.Vector2, grid: Grid, triggers: Triggers) =>
       blockTile.y > grid.length - 1 ||
       blockTile.y < 0 ||
       blockTile.x > grid[blockTile.y].length - 1 ||
       blockTile.x < 0 ||
-      grid[blockTile.y][blockTile.x] === 0;
+      grid[blockTile.y][blockTile.x] === 0 ||
+      (grid[blockTile.y][blockTile.x] === 4 && !triggers.a) ||
+      (grid[blockTile.y][blockTile.x] === 5 && triggers.a) ||
+      (grid[blockTile.y][blockTile.x] === 7 && !triggers.b) ||
+      (grid[blockTile.y][blockTile.x] === 8 && triggers.b);
+
+    const testCell = (blockTile: BABYLON.Vector2, grid: Grid, tile: Tile) =>
+      blockTile.y < grid.length &&
+      blockTile.x < grid[blockTile.y].length &&
+      grid[blockTile.y][blockTile.x] === tile;
 
     const checkBlock = () => {
       resetTransformations();
 
-      const didWin =
-        sceneState.blockOrientation === 'y' &&
-        sceneState.blockTile.y < sceneState.grid.length - 1 &&
-        sceneState.blockTile.x < sceneState.grid[sceneState.blockTile.y].length - 1 &&
-        sceneState.grid[sceneState.blockTile.y][sceneState.blockTile.x] === 2;
+      const didWin = testCell(sceneState.blockTile, sceneState.grid, 2);
       if (didWin) {
         sceneState.mode = 'finished';
         fieldMesh.material = null;
         setTimeout(() => {
+          sceneState.currentLevel += 1;
+          if (sceneState.currentLevel > levels.length - 1) {
+            sceneState.currentLevel = 0;
+          }
           resetLevel();
         }, 1000);
+        return;
+      }
+
+      const isTriggerA =
+        testCell(sceneState.blockTile, sceneState.grid, 3) ||
+        (sceneState.blockOrientation === 'x' && testCell(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid, 3)) ||
+        (sceneState.blockOrientation === 'z' && testCell(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid, 3));
+      if (isTriggerA) {
+        sceneState.triggers.a = !sceneState.triggers.a;
+        sceneState.triggerATiles.forEach(tile => {
+          tile.setEnabled(sceneState.triggers.a);
+        });
+        sceneState.triggerATilesInverted.forEach(tile => {
+          tile.setEnabled(!sceneState.triggers.a);
+        });
+      }
+
+      const isTriggerB =
+        testCell(sceneState.blockTile, sceneState.grid, 6) ||
+        (sceneState.blockOrientation === 'x' && testCell(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid, 6)) ||
+        (sceneState.blockOrientation === 'z' && testCell(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid, 6));
+      if (isTriggerB) {
+        sceneState.triggers.b = !sceneState.triggers.b;
+        sceneState.triggerBTiles.forEach(tile => {
+          tile.setEnabled(sceneState.triggers.b);
+        });
+        sceneState.triggerBTilesInverted.forEach(tile => {
+          tile.setEnabled(!sceneState.triggers.b);
+        });
       }
 
       const shouldExplode =
-        isExplosiveTile(sceneState.blockTile, sceneState.grid) ||
-        (sceneState.blockOrientation === 'x' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid)) ||
-        (sceneState.blockOrientation === 'z' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid));
+        isExplosiveTile(sceneState.blockTile, sceneState.grid, sceneState.triggers) ||
+        (sceneState.blockOrientation === 'x' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid, sceneState.triggers)) ||
+        (sceneState.blockOrientation === 'z' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid, sceneState.triggers));
       if (shouldExplode) {
         explodeBlock();
         setTimeout(() => {
           resetLevel();
         }, 3000);
+        return;
       }
     }
 
@@ -659,7 +831,7 @@ const onContentLoaded = () => {
     stencil: true
   });
 
-  const scene = createScene(engine, level);
+  const scene = createScene(engine, levels);
 
   // Update FPS counter once per second
   setInterval(() => {
