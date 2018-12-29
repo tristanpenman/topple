@@ -579,6 +579,18 @@ const onContentLoaded = () => {
         return;
       }
 
+      const shouldExplode =
+        isExplosiveTile(sceneState.blockTile, sceneState.grid, sceneState.triggers) ||
+        (sceneState.blockOrientation === 'x' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid, sceneState.triggers)) ||
+        (sceneState.blockOrientation === 'z' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid, sceneState.triggers));
+      if (shouldExplode) {
+        explodeBlock();
+        setTimeout(() => {
+          resetLevel();
+        }, 3000);
+        return;
+      }
+
       const isTriggerA =
         testCell(sceneState.blockTile, sceneState.grid, 3) ||
         (sceneState.blockOrientation === 'x' && testCell(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid, 3)) ||
@@ -605,18 +617,6 @@ const onContentLoaded = () => {
         sceneState.triggerBTilesInverted.forEach(tile => {
           tile.setEnabled(!sceneState.triggers.b);
         });
-      }
-
-      const shouldExplode =
-        isExplosiveTile(sceneState.blockTile, sceneState.grid, sceneState.triggers) ||
-        (sceneState.blockOrientation === 'x' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(1, 0)), sceneState.grid, sceneState.triggers)) ||
-        (sceneState.blockOrientation === 'z' && isExplosiveTile(sceneState.blockTile.add(new BABYLON.Vector2(0, 1)), sceneState.grid, sceneState.triggers));
-      if (shouldExplode) {
-        explodeBlock();
-        setTimeout(() => {
-          resetLevel();
-        }, 3000);
-        return;
       }
     }
 
