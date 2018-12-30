@@ -558,6 +558,7 @@ const onContentLoaded = () => {
       (grid[blockTile.y][blockTile.x] === 8 && triggers.b);
 
     const testCell = (blockTile: BABYLON.Vector2, grid: Grid, tile: Tile) =>
+      blockTile.y >= 0 &&
       blockTile.y < grid.length &&
       blockTile.x < grid[blockTile.y].length &&
       grid[blockTile.y][blockTile.x] === tile;
@@ -565,7 +566,7 @@ const onContentLoaded = () => {
     const checkBlock = () => {
       resetTransformations();
 
-      const didWin = testCell(sceneState.blockTile, sceneState.grid, 2);
+      const didWin = sceneState.blockOrientation === 'y' && testCell(sceneState.blockTile, sceneState.grid, 2);
       if (didWin) {
         sceneState.mode = 'finished';
         fieldMesh.material = null;
@@ -618,7 +619,7 @@ const onContentLoaded = () => {
           tile.setEnabled(!sceneState.triggers.b);
         });
       }
-    }
+    };
 
     // ---------------------------------------------------------------------------------------------
     //
