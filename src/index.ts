@@ -1,4 +1,5 @@
 import * as BABYLON from 'babylonjs';
+import 'babylonjs-loaders';
 import { cloneDeep } from 'lodash';
 import field from './shaders/field';
 
@@ -41,6 +42,7 @@ interface Triggers {
 
 interface SceneState {
   animating: boolean;
+  blockMeshChild: BABYLON.AbstractMesh | null;
   blockOrientation: Axis;
   blockTile: BABYLON.Vector2;
   currentLevel: number;
@@ -173,6 +175,7 @@ const onContentLoaded = () => {
 
     const sceneState: SceneState = {
       animating: false,
+      blockMeshChild: null,
       blockOrientation: levels[0].initialOrientation,
       blockTile: levels[0].initialTile.clone(),
       currentLevel: 0,
@@ -282,7 +285,7 @@ const onContentLoaded = () => {
     gizmo.visibility = 0;
 
     // Block, which will cast shadows
-    const blockMesh = BABYLON.Mesh.CreateBox('blockMesh', 1, scene);
+    const blockMesh = BABYLON.MeshBuilder.CreateBox('blockMesh', {width: 1, depth: 1, height: 2}, scene);
     blockMesh.parent = gizmo;
     blockMesh.material = blockMaterial;
 
@@ -323,6 +326,17 @@ const onContentLoaded = () => {
     const pointLight2 = new BABYLON.PointLight('pointLight2', new BABYLON.Vector3(-3, 2, -1), scene);
     pointLight2.intensity = 0.4;
 
+    BABYLON.SceneLoader.LoadAssetContainer("assets/", "block.obj", scene, function (container) {
+      const { meshes } = container;
+      meshes[0].material = blockMaterial;
+      meshes[0].parent = blockMesh;
+      blockMesh.visibility = 0;
+      sceneState.blockMeshChild = meshes[0];
+      scene.addMesh(meshes[0]);
+      pointLight2.includedOnlyMeshes = [...pieces, sceneState.blockMeshChild];
+      shadowGenerator.getShadowMap().renderList = [...pieces, sceneState.blockMeshChild];
+    });
+
     // ---------------------------------------------------------------------------------------------
     //
     // Level setup
@@ -339,17 +353,20 @@ const onContentLoaded = () => {
       gizmo.position = new BABYLON.Vector3(blockPosition.x, 0.0, blockPosition.y);
       gizmo.rotation = new BABYLON.Vector3();
       if (sceneState.blockOrientation === 'x') {
-        blockMesh.scaling = new BABYLON.Vector3(2.0, 1.0, 1.0);
+        blockMesh.rotation.x = 0;
+        blockMesh.rotation.z = Math.PI / 2;
         blockMesh.position.x = 0;
         blockMesh.position.y = 0.5;
         blockMesh.position.z = 0;
       } else if (sceneState.blockOrientation === 'y') {
-        blockMesh.scaling = new BABYLON.Vector3(1.0, 2.0, 1.0);
+        blockMesh.rotation.x = 0;
+        blockMesh.rotation.z = 0;
         blockMesh.position.x = 0;
-        blockMesh.position.y = 1.0;
+        blockMesh.position.y = 1;
         blockMesh.position.z = 0;
       } else {
-        blockMesh.scaling = new BABYLON.Vector3(1.0, 1.0, 2.0);
+        blockMesh.rotation.x = Math.PI / 2;
+        blockMesh.rotation.z = 0;
         blockMesh.position.x = 0;
         blockMesh.position.y = 0.5;
         blockMesh.position.z = 0;
@@ -386,9 +403,13 @@ const onContentLoaded = () => {
         }
       }
 
-      pointLight2.includedOnlyMeshes = [...pieces, blockMesh];
-
-      shadowGenerator.getShadowMap().renderList = [...pieces, blockMesh];
+      if (sceneState.blockMeshChild) {
+        pointLight2.includedOnlyMeshes = [...pieces, sceneState.blockMeshChild];
+        shadowGenerator.getShadowMap().renderList = [...pieces, sceneState.blockMeshChild];
+      } else {
+        pointLight2.includedOnlyMeshes = [...pieces, blockMesh];
+        shadowGenerator.getShadowMap().renderList = [...pieces, blockMesh];
+      }
     }
 
     const resetLevel = () => {
@@ -630,10 +651,10 @@ const onContentLoaded = () => {
     const moveGizmoToXMin = () => {
       if (sceneState.blockOrientation === 'x') {
         gizmo.position.x -= 1.0;
-        blockMesh.position.x = 1.0;
+        blockMesh.position.x += 1.0;
       } else {
         gizmo.position.x -= 0.5;
-        blockMesh.position.x = 0.5;
+        blockMesh.position.x += 0.5;
       }
     };
 
@@ -670,7 +691,7 @@ const onContentLoaded = () => {
     const moveGizmoToXMax = () => {
       if (sceneState.blockOrientation === 'x') {
         gizmo.position.x += 1.0;
-        blockMesh.position.x = -1.0;
+        blockMesh.position.x -= 1.0;
       } else {
         gizmo.position.x += 0.5;
         blockMesh.position.x -= 0.5;
@@ -710,10 +731,10 @@ const onContentLoaded = () => {
     const moveGizmoToYMin = () => {
       if (sceneState.blockOrientation === 'z') {
         gizmo.position.z -= 1.0;
-        blockMesh.position.z = 1.0;
+        blockMesh.position.z += 1.0;
       } else {
         gizmo.position.z -= 0.5;
-        blockMesh.position.z = 0.5;
+        blockMesh.position.z += 0.5;
       }
     };
 
@@ -750,10 +771,10 @@ const onContentLoaded = () => {
     const moveGizmoToYMax = () => {
       if (sceneState.blockOrientation === 'z') {
         gizmo.position.z += 1.0;
-        blockMesh.position.z = -1.0;
+        blockMesh.position.z -= 1.0;
       } else {
         gizmo.position.z += 0.5;
-        blockMesh.position.z = -0.5;
+        blockMesh.position.z -= 0.5;
       }
     };
 
