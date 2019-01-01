@@ -231,7 +231,7 @@ const onContentLoaded = () => {
     fieldMaterial.setTexture('textureSampler', fieldTexture);
 
     // Create a simple camera, looking over the scene
-    const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 1.5, Math.PI / 4, 14, BABYLON.Vector3.Zero(), scene);
+    const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 4, 11, BABYLON.Vector3.Zero(), scene);
     camera.attachControl(canvas, false);
     camera.inputs.remove(camera.inputs.attached.keyboard);
 
