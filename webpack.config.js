@@ -50,7 +50,7 @@ var config = {
         enforce: 'pre',
         test: /\.tsx?$/,
         exclude: [/\/node_modules\//],
-        use: ['awesome-typescript-loader', 'source-map-loader']
+        use: ['ts-loader', 'source-map-loader']
       },
         {
           test: /\.(glsl|vert|frag)$/, loader: "shader-loader"

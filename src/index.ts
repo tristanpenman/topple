@@ -3,6 +3,10 @@ import 'babylonjs-loaders';
 import { cloneDeep } from 'lodash';
 import field from './shaders/field';
 
+import * as cannon from "cannon";
+
+window.CANNON = cannon;
+
 type Axis = 'x' | 'y' | 'z';
 
 //
