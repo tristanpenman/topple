@@ -1,8 +1,31 @@
 {
-  "author": "Tristan Penman <tristan@tristanpenman.com>",
-  "bundleDependencies": [],
-  "deprecated": false,
-  "description": "",
+  "name": "topple",
+  "description": "Prototype for a block puzzle game, inspired by Bloxorz.",
+  "version": "0.0.1",
+  "license": "MIT",
+  "author": {
+    "name": "Tristan Penman",
+    "email": "tristan@tristanpenman.com"
+  },
+  "scripts": {
+    "build": "npm run build:prod",
+    "build:dev": "webpack --mode development --config ./webpack.config.js --progress --color --display-error-details",
+    "build:prod": "cross-env NODE_ENV=production webpack --mode production --config ./webpack.config.js  --progress  --color --display-error-details --bail",
+    "clean": "npm cache clear && rimraf -- dist",
+    "server": "npm run server:dev",
+    "server:dev": "webpack-dev-server --mode development --config ./webpack.config.js --hot --inline --progress --watch --open",
+    "server:prod": "cross-env NODE_ENV=production webpack-dev-server  --mode production --config ./webpack.config.js --port 3000 --host 0.0.0.0 --hot --inline --progress  --watch --open --content-base dist/",
+    "start": "npm run server:dev"
+  },
+  "dependencies": {
+    "babylonjs": "^6.49.0",
+    "babylonjs-gltf2interface": "^6.49.0",
+    "babylonjs-loaders": "^6.49.0",
+    "cannon": "^0.6.2",
+    "clean-webpack-plugin": "^1.0.0",
+    "copy-webpack-plugin": "^4.6.0",
+    "lodash": "4.17.11"
+  },
   "devDependencies": {
     "@types/cannon": "^0.1.13",
     "@types/lodash": "4.14.119",
@@ -24,29 +47,6 @@
     "webpack": "4.28.1",
     "webpack-cli": "^3.1.0",
     "webpack-dev-server": "^3.1.5"
-  },
-  "license": "ISC",
-  "main": "src/index.ts",
-  "name": "block-puzzle",
-  "scripts": {
-    "build": "npm run build:prod",
-    "build:dev": "webpack --mode development --config ./webpack.config.js --progress --color --display-error-details",
-    "build:prod": "cross-env NODE_ENV=production webpack --mode production --config ./webpack.config.js  --progress  --color --display-error-details --bail",
-    "clean": "npm cache clear && rimraf -- dist",
-    "server": "npm run server:dev",
-    "server:dev": "webpack-dev-server --mode development --config ./webpack.config.js --hot --inline --progress --watch --open",
-    "server:prod": "cross-env NODE_ENV=production webpack-dev-server  --mode production --config ./webpack.config.js --port 3000 --host 0.0.0.0 --hot --inline --progress  --watch --open --content-base dist/",
-    "start": "npm run server:dev"
-  },
-  "version": "0.0.1",
-  "dependencies": {
-    "babylonjs": "^6.49.0",
-    "babylonjs-gltf2interface": "^6.49.0",
-    "babylonjs-loaders": "^6.49.0",
-    "cannon": "^0.6.2",
-    "clean-webpack-plugin": "^1.0.0",
-    "copy-webpack-plugin": "^4.6.0",
-    "lodash": "4.17.11"
   },
   "engines": {
     "node" : ">=16.0.0 <17.0.0"
