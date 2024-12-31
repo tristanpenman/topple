@@ -1,6 +1,14 @@
 # Topple
 
-Prototype for a block puzzle game, inspired by [Bloxorz](https://flashgaming.fandom.com/wiki/Bloxorz). Written in TypeScript, using the [Babylon.js](https://www.babylonjs.com/) 3D engine.
+Prototype for a block puzzle game, inspired by [Bloxorz](https://flashgaming.fandom.com/wiki/Bloxorz).
+
+Topple is written in TypeScript, using the [Babylon.js](https://www.babylonjs.com/) 3D engine.
+
+![Screenshot](./screenshot.png)
+
+## Demo
+
+A live demo can be found [here](https://tristanpenman.com/demos/topple/).
 
 ## Development
 
